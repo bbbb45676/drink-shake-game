@@ -137,7 +137,7 @@ export class Figure {
     }
 
     // 頭
-    const head = new THREE.Group(); head.position.y = 1.39; body.add(head); this.head = head;
+    const head = new THREE.Group(); head.position.y = 1.39; body.add(head); this.head = head; this.headBaseY = 1.39;
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 12), skin); neck.position.y = -0.145; head.add(neck);
     const R = 0.158;
     const skull = sphere(R, skin, 32, 24); skull.scale.set(1, 0.96, 0.96); head.add(skull);
@@ -287,12 +287,12 @@ export class Figure {
   }
 
   // 動作：walk 0~1，talk，reach（右手伸向前），hold
-  animate(dt, { walk = 0, talk = false, reach = 0, drink = 0, flail = 0, look = 0 }) {
+  animate(dt, { walk = 0, talk = false, reach = 0, drink = 0, flail = 0, look = 0, headOff = null, headSpin = 0 }) {
     this.t += dt;
     const t = this.t;
     // 眨眼、說話
     this.blinkT -= dt;
-    const baseExpr = this.baseExpr || 'neutral';
+    const baseExpr = this.override || this.baseExpr || 'neutral';
     let e = baseExpr;
     if (talk) { this.talkT += dt; if (Math.sin(this.talkT * 18) > 0 && baseExpr !== 'shock') e = 'talk'; }
     if (this.blinkT < 0) { if (this.blinkT < -0.12) this.blinkT = 2.5 + Math.random() * 3; else if (baseExpr === 'neutral' || baseExpr === 'talk') e = 'blink'; }
@@ -323,9 +323,15 @@ export class Figure {
       Rr.elbow.rotation.x = -1.6 * drink;
     }
     // 頭：看人、歪頭
-    this.head.rotation.y = Math.sin(t * 0.5) * 0.1 * (1 - walk) + look;
+    this.head.rotation.y = Math.sin(t * 0.5) * 0.1 * (1 - walk) + look + headSpin;
     this.head.rotation.z = Math.sin(t * 0.7 + 1) * 0.04;
     this.head.rotation.x = drink * -0.3;
+    // 被手推：頭往後仰、往旁邊歪
+    if (headOff) {
+      this.head.position.set(headOff.x * 0.6, this.headBaseY + headOff.y * 0.4, headOff.z * 0.6);
+      this.head.rotation.z += -headOff.x * 3.0;
+      this.head.rotation.x += headOff.z * 3.0;
+    }
     if (this.tail) this.tail.rotation.x = 0.35 + Math.sin(wp * 2) * 0.15 * walk;
   }
 
@@ -352,6 +358,25 @@ export class Customer {
     this.cup = null;
     this.vel = new THREE.Vector3(); this.spin = new THREE.Vector3();
     this.fig.baseExpr = info.kind === 'rude' ? 'smug' : 'neutral';
+    this.headOff = new THREE.Vector3(); this.headVel = new THREE.Vector3(); this.headPush = new THREE.Vector3();
+    this.headSpin = 0; this.headSpinV = 0; this.touchT = 0;
+  }
+
+  // 世界方向 → 客人自己的座標
+  toLocal(v) { return v.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -this.facing); }
+  pushHead(world) {
+    if (!world) { this.headPush.set(0, 0, 0); return; }
+    this.headPush.copy(this.toLocal(world));
+    this.touchT = Math.max(this.touchT, 0.25);
+    if (!this.fig.override) this.fig.override = 'shock';
+  }
+  poke() { this.touchT = 0.6; this.fig.override = 'shock'; }
+  slap(world, speed) {
+    const l = this.toLocal(world);
+    this.headVel.addScaledVector(l, Math.min(3, speed) * 0.9);
+    this.headSpinV += (l.x >= 0 ? -1 : 1) * Math.min(14, speed * 5);
+    this.touchT = 1.4; this.fig.override = this.kind === 'rude' ? 'shock' : 'angry';
+    if (this.kind !== 'rude') this.fig.baseExpr = 'angry';
   }
 
   get pos() { return this.root.position; }
@@ -418,12 +443,20 @@ export class Customer {
       if (this.staggerT > 1.0) { f.body.rotation.x = 0; this.state = 'idle'; this.staggerDone?.(); }
     }
     this.root.rotation.y = this.facing;
+    // 頭的彈簧：被推會歪過去，放開彈回來
+    const k = 90, damp = 11;
+    this.headVel.addScaledVector(this.headPush.clone().sub(this.headOff), k * dt).multiplyScalar(Math.max(0, 1 - damp * dt));
+    this.headOff.addScaledVector(this.headVel, dt);
+    this.headOff.clampLength(0, 0.12);
+    this.headSpinV += (-this.headSpin * 60) * dt; this.headSpinV *= Math.max(0, 1 - 7 * dt);
+    this.headSpin += this.headSpinV * dt;
+    if (this.touchT > 0) { this.touchT -= dt; if (this.touchT <= 0) this.fig.override = null; }
     if (this.talkT > 0) this.talkT -= dt;
     this.reach += ((this.wantReach ? 1 : 0) - this.reach) * Math.min(1, dt * 6);
     this.drinkK += ((this.drinking ? 1 : 0) - this.drinkK) * Math.min(1, dt * 4);
     this.flail += (((this.state === 'fly' || this.state === 'flee' && this.kind === 'rude') ? 1 : 0) - this.flail) * Math.min(1, dt * 6);
     f.noBob = this.state === 'fly' || this.state === 'down';
-    f.animate(dt, { walk, talk: this.talkT > 0, reach: this.reach, drink: this.drinkK, flail: this.flail, look: this.lookAt || 0 });
+    f.animate(dt, { walk, talk: this.talkT > 0, reach: this.reach, drink: this.drinkK, flail: this.flail, look: this.lookAt || 0, headOff: this.headOff, headSpin: this.headSpin });
   }
 
   // 翻滾時繞著身體中間轉（不是繞著腳）

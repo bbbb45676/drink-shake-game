@@ -221,12 +221,66 @@ let PICK = null;
 
 function ndc(x, y) { return new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1); }
 
+// 射線打到客人的頭（球）
+const _sph = new THREE.Sphere(), _hp = new THREE.Vector3();
+function faceHit(r) {
+  let best = null, bd = Infinity;
+  for (const c of customers) {
+    if (!['idle', 'walk', 'stagger'].includes(c.state)) continue;
+    c.fig.head.getWorldPosition(_sph.center);
+    _sph.radius = 0.16 * c.look.height;
+    if (!r.intersectSphere(_sph, _hp)) continue;
+    const d = _hp.distanceTo(r.origin);
+    if (d < bd) { bd = d; best = { point: _hp.clone(), kind: 'face', data: { cust: c }, normal: _hp.clone().sub(_sph.center).normalize() }; }
+  }
+  return best;
+}
+
+// 手碰到客人的臉：推得動，打得快＝巴下去
+const SLAP_GOOD = ['欸！你幹嘛！', '很痛欸！', '我只是來買飲料的⋯'];
+const SLAP_RUDE = ['蛤？你打我？', '我要拍下來 PO 網！', '你們店員打人啦！'];
+function updateFaces(dt) {
+  if (G.phase !== 'play') return;
+  for (const c of customers) {
+    if (!['idle', 'walk', 'stagger'].includes(c.state)) continue;
+    const C = c.fig.head.getWorldPosition(new THREE.Vector3());
+    const rad = 0.16 * c.look.height + 0.045;
+    let push = null;
+    for (const h of hands) {
+      if (h.held && h.held.kind !== 'air') continue;
+      const d = h.pos.clone().sub(C), dist = d.length();
+      // 按著的手指劃過臉（畫面上）也算碰到：快速一揮手可能一兩幀就過去了
+      const overFace = h.pressed && h.surf?.kind === 'face' && h.surf.data.cust === c;
+      if (dist >= rad && !overFace) { if (h.faceTouch === c) h.faceTouch = null; continue; }
+      const dir = dist < rad ? d.multiplyScalar(-1 / Math.max(dist, 1e-4)) : C.clone().sub(camera.position).setY(0).normalize(); // 推的方向
+      if (dist < rad) push = (push || new THREE.Vector3()).addScaledVector(dir, Math.min(0.09, rad - dist + 0.01));
+      const sp = Math.max(h.vel.length(), (h.ss || 0) * 1.2);
+      const swipe = new THREE.Vector3(h.sx - (h.psx ?? h.sx), 0, 0);
+      if (sp > 1.3 && Math.abs(swipe.x) > 1) dir.add(new THREE.Vector3(Math.sign(swipe.x) * 0.8, 0, 0).applyQuaternion(camera.quaternion)).normalize();
+      if (h.faceTouch !== c) {
+        h.faceTouch = c;
+        if (sp > 1.3) {
+          c.slap(dir, sp); sfx.thud(); G.shake = Math.max(G.shake, 0.25);
+          hud.say(c, pick(c.kind === 'rude' ? SLAP_RUDE : SLAP_GOOD), { hot: true, time: 1.8 });
+        } else c.poke();
+      }
+    }
+    c.pushHead(push);
+  }
+  for (const h of hands) { h.psx = h.sx; }
+}
+
 let SURF_HOLD = null;
 function surfaceAt(sx, sy, holding = false) {
   ray.setFromCamera(ndc(sx, sy), camera);
   SURF ||= surfaceProxies();
   SURF_HOLD ||= SURF.filter((p) => p.userData.kind !== 'lever' && p.userData.kind !== 'syrupBtn');
   const hit = ray.intersectObjects(holding ? SURF_HOLD : SURF, false)[0];
+  // 空手可以伸到客人臉上
+  if (!holding && (!hit || hit.object.userData.kind === 'air')) {
+    const f = faceHit(ray.ray);
+    if (f) return f;
+  }
   if (hit) return { point: hit.point.clone(), kind: hit.object.userData.kind, data: hit.object.userData };
   return { point: ray.ray.at(1.2, new THREE.Vector3()), kind: 'air', data: {} };
 }
@@ -274,12 +328,13 @@ function computeTarget(h, out) {
   } else {
     out.copy(P);
     if (s.kind === 'lever' || s.kind === 'syrupBtn') out.y += 0.02;
+    else if (s.kind === 'face') out.addScaledVector(s.normal, h.pressed ? 0.012 : 0.06); // 按住＝手貼在臉上推
     else if (s.kind !== 'air') out.y += h.pressed ? 0.035 : 0.06;
   }
   // 手臂長度有限
   const sh = _v.set(h.side * 0.12, -0.3, 0).applyMatrix4(camera.matrixWorld);
   const d = out.distanceTo(sh);
-  if (d > 1.9) out.sub(sh).multiplyScalar(1.9 / d).add(sh);
+  if (d > 2.4) out.sub(sh).multiplyScalar(2.4 / d).add(sh); // 要伸得到窗口客人的臉
   return out;
 }
 
@@ -287,6 +342,9 @@ function updateHands(dt) {
   for (const h of hands) {
     const live = G.phase === 'play' && (h.pressed || h.hovering || h.ptr != null);
     h.moved = false;
+    // 手指／游標在畫面上的速度（每秒幾個畫面高）：拿來判斷巴下去
+    const ssp = h.lsx != null ? Math.hypot(h.sx - h.lsx, h.sy - h.lsy) / innerHeight / Math.max(dt, 1e-3) : 0;
+    h.ss = (h.ss || 0) * 0.5 + ssp * 0.5; h.lsx = h.sx; h.lsy = h.sy;
     if (live) { computeTarget(h, h.target); h.idle = 0; }
     else {
       h.idle += dt;
@@ -383,7 +441,7 @@ function onPress(h) {
       return;
     }
     case 'ice': { h.held = { kind: 'ice' }; h.model.ice.visible = true; sfx.clink(); spend('ingredients', MON.ice); return; }
-    case 'lever': { const open = p.urn.toggle(); h.held = { kind: 'lever', urn: p.urn }; sfx.lever(); if (open) G.didTap = true; return; }
+    case 'lever': { h.held = { kind: 'lever', urn: p.urn }; G.didTap = true; return; } // 按住才出茶
     case 'syrupBtn': { syrup.pressed = true; h.held = { kind: 'syrup' }; sfx.button(); return; }
   }
   h.held = { kind: 'air' }; h.dwellKey = null; h.dwellT = 0;
@@ -576,9 +634,9 @@ function updateHeld(dt) {
         }
       }
       // 握拳的手碰到開關／按鈕＝按下去（電腦版第二隻手就是這樣操作）
+      // 握拳壓著開關＝出茶，手離開就停
       let touching = null;
       for (const u of urns) if (h.pos.distanceTo(u.pickPos) < 0.095) touching = u;
-      if (touching && h.contact !== touching) { const open = touching.toggle(); sfx.lever(); if (open) G.didTap = true; }
       h.contact = touching || (h.contact && h.pos.distanceTo(h.contact.pickPos) < 0.14 ? h.contact : null);
       const btn = _v.set(L.syrup.x, Y + 0.34, L.syrup.z + 0.02);
       if (h.pos.distanceTo(btn) < 0.1) { h.held = { kind: 'syrup' }; syrup.pressed = true; sfx.button(); }
@@ -648,6 +706,9 @@ function pourSource(nozzle, stream, dt, rate, addFn, color, isSyrup) {
 function updatePouring(dt) {
   let flows = 0;
   for (const u of urns) {
+    // 茶桶：有手按住開關才出茶（放開就停），比較好控制量
+    const held = G.phase === 'play' && hands.some((h) => (h.held?.kind === 'lever' && h.held.urn === u && h.pos.distanceTo(u.pickPos) < 0.16) || (h.held?.kind === 'air' && h.contact === u));
+    if (held !== u.open) { u.open = held; sfx.lever(); }
     u.update(dt);
     if (u.flow > 0.5) {
       flows++;
@@ -1052,9 +1113,8 @@ function updateHint() {
   if (!cup) t = `${press}<b>杯架</b>拿一個杯子`;
   else if (o.top && cup.tops[o.top] < 6 && !cup.sealed) t = `${press}料槽裡的<b>勺子</b>，在槽裡撈一撈，再移到杯口倒`;
   else if (cup.ice < (o.ice === 'none' ? 0 : o.ice === 'less' ? 1 : 3) && !cup.sealed) t = `${press}<b>冰桶</b>抓冰塊，在杯口放開`;
-  else if (cup.level < 0.75 && !cup.sealed) t = urns.some((u) => u.open) ? '倒到八分滿，<b>點開關關掉！</b>' : '杯子放到<b>茶桶</b>下，點<b>開關</b>出茶';
+  else if (cup.level < 0.75 && !cup.sealed) t = urns.some((u) => u.open) ? '倒到八分滿就<b>放開開關</b>' : '杯子放到<b>茶桶</b>下的圈裡，<b>按住開關</b>出茶';
   else if (Math.abs(cup.sugar - o.sweet) > 1 && !cup.sealed) t = `杯子放到<b>果糖機</b>下，${press}按鈕`;
-  else if (urns.some((u) => u.open)) t = '茶桶還開著！<b>點開關關掉</b>';
   else if (!cup.sealed) t = '把杯子放進<b>封膜機</b>';
   else if (cup.mix < 1) t = '拿著杯子<b>上下快速晃</b>搖勻';
   else t = '交給客人：<b>伸到窗口放開</b>，或放在出餐台';
@@ -1072,6 +1132,7 @@ function frame(dt) {
   }
   updateCamera(dt);
   updateHands(dt);
+  updateFaces(dt);
   updateHeld(dt);
   updatePouring(dt);
   sealer.update(dt, cups, (c) => { G.lastCup = c; }, sfx);

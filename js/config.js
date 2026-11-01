@@ -45,7 +45,7 @@ export const CONFIG = {
   titles: [
     { min: 900, name: '店長候選', line: '老闆說明天開始你來排班' },
     { min: 500, name: '可以上工', line: '手腳很快，奧客也趕得很漂亮' },
-    { min: 150, name: '試用期', line: '再練一下，茶桶記得關' },
+    { min: 150, name: '試用期', line: '再練一下，茶要對準杯子' },
     { min: -Infinity, name: '被老闆請回家', line: '店裡還在拖地板⋯' },
   ],
 
