@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#3E2618">
+<meta name="description" content="站在手搖飲店吧台後面，用兩隻手做飲料：開茶桶、舀珍珠、封膜、搖勻，交給客人。奧客就把飲料砸過去。">
+<title>手搖飲搖搖樂：奧客退散！</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "rapier": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+
+  <div id="ui">
+    <header id="hud" hidden>
+      <div class="chip chip-time"><span>下班</span><b id="hud-time">3:00</b></div>
+      <div class="chip chip-score"><span>分數</span><b id="hud-score">0</b></div>
+      <button id="btn-sound" class="icon-btn" aria-label="開啟音效"></button>
+    </header>
+
+    <div id="ticket" hidden></div>
+    <div id="bubble" hidden></div>
+    <div id="cup-tag" hidden></div>
+    <div id="hint" hidden></div>
+    <div id="popups"></div>
+    <div id="stamp" hidden></div>
+
+    <!-- 開始畫面 -->
+    <section id="screen-start" class="screen" hidden>
+      <div class="start-card">
+        <p class="start-shop"><span class="logo">晃</span>晃晃茶舖・打工第一天</p>
+        <h1>手搖飲<br>搖搖樂</h1>
+        <p class="start-sub">奧客退散！</p>
+        <p class="start-lead">你站在吧台後面，只有兩隻手。<br>開茶桶、舀珍珠、封膜、搖勻，交給客人。<br>遇到奧客？把飲料砸過去。</p>
+        <div id="ctl-desktop" class="controls">
+          <div><kbd>左鍵</kbd>左手</div><div><kbd>右鍵</kbd>右手</div>
+          <p>按住＝抓住，放開＝放手（杯子會掉）。<br>滑鼠移動的是「最後按下的那隻手」。觸控板可以用 <kbd>Z</kbd> <kbd>X</kbd> 代替左右鍵。</p>
+        </div>
+        <div id="ctl-touch" class="controls" hidden>
+          <div><kbd>一根手指</kbd>一隻手</div><div><kbd>兩根手指</kbd>兩隻手</div>
+          <p>按住＝抓住，放開＝放手（杯子會掉）。<br>手伸到畫面邊緣，頭會轉過去看。</p>
+        </div>
+        <details class="rules">
+          <summary>計分規則</summary>
+          <table>
+            <tr><td>出餐全對</td><td class="p">+100</td></tr>
+            <tr><td>快：20 秒內／35 秒內交到</td><td class="p">+50／+25</td></tr>
+            <tr><td>刁難客的要求做到</td><td class="p">+100</td></tr>
+            <tr><td>砸中奧客</td><td class="p">+150</td></tr>
+            <tr><td>每錯一項（茶、甜度、冰、料、太少、沒搖勻）</td><td class="m">−25</td></tr>
+            <tr><td>沒封膜就交出去</td><td class="m">−40</td></tr>
+            <tr><td>乖乖做給奧客</td><td class="m">−50</td></tr>
+            <tr><td>客人等太久走掉</td><td class="m">−50</td></tr>
+            <tr><td>砸中好客人（一星負評）</td><td class="m">−150</td></tr>
+            <tr><td>杯子掉到地上</td><td class="m">−20</td></tr>
+            <tr><td>灑出來（每灑掉一整杯的量）</td><td class="m">−20</td></tr>
+          </table>
+        </details>
+        <label class="snd"><input type="checkbox" id="chk-sound" checked> 開音效</label>
+        <button id="btn-start" class="btn btn-primary btn-big">開始上班</button>
+      </div>
+    </section>
+
+    <!-- 結算 -->
+    <section id="screen-result" class="screen" hidden>
+      <div class="result-wrap">
+        <img id="result-img" alt="下班結算卡">
+        <div id="result-money"></div>
+        <div class="actions">
+          <button id="btn-download" class="btn btn-ghost">下載圖片</button>
+          <button id="btn-again" class="btn btn-primary">再上一班</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="loading"><div class="cup-spin"><i></i></div><p>開店準備中⋯</p></div>
+    <div id="error" hidden></div>
+  </div>
+</div>
+<script>
+  (function () {
+    var msg = function (html) { var l = document.getElementById('loading'); var e = document.getElementById('error'); if (l) l.hidden = true; e.innerHTML = html; e.hidden = false; };
+    if (location.protocol === 'file:') {
+      msg('這個遊戲要用本機伺服器開啟。<br>在 src 資料夾執行：<br><code>python -m http.server 8000 --bind 127.0.0.1</code><br>再打開 http://127.0.0.1:8000');
+      return;
+    }
+    setTimeout(function () {
+      var l = document.getElementById('loading');
+      if (l && !l.hidden && !l.classList.contains('fade')) msg('載入太久了⋯<br>請確認有連上網路（遊戲引擎從 jsDelivr 載入），再重新整理。');
+    }, 25000);
+  })();
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

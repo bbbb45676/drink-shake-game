@@ -1,0 +1,48 @@
+{
+  "_說明": "客人台詞與規則。新增網友投稿：在 picky 或 rude 陣列加一筆，格式照現有的寫。picky 的 rule 只能用 README 列出的幾種；rude 不需要 rule。",
+  "normal": [
+    { "line": "{order}，謝謝～" },
+    { "line": "老闆，{order}！" },
+    { "line": "嗨～我要{order}" },
+    { "line": "{order}，外帶" },
+    { "line": "一杯{order}，不用袋子" },
+    { "line": "{order}，我自己帶杯子⋯啊忘了，用你們的" },
+    { "line": "麻煩{order}，謝謝你喔" }
+  ],
+  "picky": [
+    { "id": "oneIce", "line": "我要一顆冰塊。對，一顆。", "ticket": "冰塊：剛好 1 顆", "rule": { "iceExact": 1 } },
+    { "id": "pearl12", "line": "珍珠要剛好 12 顆，我會數。", "ticket": "珍珠：剛好 12 顆", "rule": { "toppingExact": { "pearl": 12 } } },
+    { "id": "sweet37", "line": "甜度 3.7 分，不要 3.6。", "ticket": "甜度：3.7", "rule": { "sweetExact": 3.7 } },
+    { "id": "shake100", "line": "幫我搖 100 下，我會聽。", "ticket": "搖 100 下", "rule": { "shakeCount": 100 } },
+    { "id": "same", "line": "跟上次一樣的。", "ticket": "跟上次一樣（？）", "rule": { "sameAsLast": true } },
+    { "id": "ice3", "line": "冰塊三顆就好，四顆會太冰。", "ticket": "冰塊：剛好 3 顆", "rule": { "iceExact": 3 } },
+    { "id": "coco8", "line": "椰果 8 顆，我在減肥。", "ticket": "椰果：剛好 8 顆", "rule": { "toppingExact": { "coco": 8 } } },
+    { "id": "sweet12", "line": "甜度 1.2，我最近在控糖。", "ticket": "甜度：1.2", "rule": { "sweetExact": 1.2 } }
+  ],
+  "rude": [
+    { "id": "hotIce", "line": "熱的、去冰，但是要冰。", "ticket": "熱的／去冰／要冰", "served": "這哪裡冰？重做！" },
+    { "id": "noCup", "line": "可以不要杯子嗎？直接倒我手上。", "ticket": "不要杯子", "served": "我說不要杯子欸⋯" },
+    { "id": "bossFriend", "line": "我是你們老闆的朋友，打一折。", "ticket": "打一折（？）", "served": "一折喔，我跟老闆說了" },
+    { "id": "cutLine", "line": "我趕時間！先做我的！", "ticket": "插隊", "served": "太慢了啦，不要了" },
+    { "id": "noMoney", "line": "點好了⋯欸我沒帶錢，先欠著？", "ticket": "沒帶錢", "served": "下次再給～掰" },
+    { "id": "influencer", "line": "我是網紅，這杯請我，我幫你們打卡。", "ticket": "免費（業配？）", "served": "粉絲 87 人喔，不客氣" },
+    { "id": "tasteFirst", "line": "先給我試喝三種，好喝再買。", "ticket": "試喝三杯", "served": "嗯⋯都還好，不買了" },
+    { "id": "ownPot", "line": "裝在我帶的這個鍋子，要滿喔。", "ticket": "裝滿一鍋", "served": "怎麼沒裝滿？" }
+  ],
+  "react": {
+    "happy": ["好喝！", "讚啦～", "就是這個味道", "下次再來！", "手腳好快欸"],
+    "wrong": ["這不是我點的⋯", "怪怪的欸", "我要的不是這樣", "嗯⋯算了"],
+    "layered": ["怎麼分層了", "沒搖勻欸"],
+    "spilled": ["怎麼剩半杯？", "這杯是被誰喝過"],
+    "unsealed": ["沒封膜？我要怎麼拿", "欸你沒封膜啦"],
+    "pickyWin": ["⋯你真的做到了", "專業！", "我收回剛剛的話"],
+    "oneStar": [
+      "店員把飲料砸在我身上，一星。",
+      "我只是來買飲料的⋯一星。",
+      "全身都是珍珠，一星。",
+      "服務很有衝擊力，一星。"
+    ],
+    "repelled": ["奧客退散！"],
+    "rudeHit": ["哎唷！", "你給我記住！", "我要客訴！！", "好啦好啦我走"]
+  }
+}
