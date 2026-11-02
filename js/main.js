@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { CONFIG, L, CUP } from './config.js';
 import { Renderer, makeSky, makeEnvironment, makeLights } from './gfx/renderer.js';
-import { initPhysics, Physics, R } from './play/physics.js';
+import { initPhysics, Physics, R, GROUPS } from './play/physics.js';
 import { makeMaterials, buildShop } from './world/shop.js';
 import { Urn, Syrup, buildCupStack, Wells, buildIceBin, Sealer } from './world/stations.js';
 import { buildStreet, Traffic } from './world/street.js';
 import { Customer, makeLook, SPOTS } from './world/customers.js';
 import { Cup, cupShared, LIQUID } from './play/cup.js';
 import { Scoop } from './play/scoop.js';
+import { Rag } from './play/rag.js';
 import { Items, Puddles, splash, groundY, TOP_INFO } from './play/items.js';
 import { HandModel, HandsInput } from './play/hands.js';
 import { Hud } from './play/hud.js';
@@ -27,7 +28,7 @@ const Y = L.counterY, H = CUP.h;
 const SC = CONFIG.score;
 
 let rend, scene, camera, phys, M, quality, hud, input, quotes;
-let urns, syrup, wells, sealer, traffic, items, puddles;
+let urns, syrup, wells, sealer, traffic, items, puddles, rag, iceScoop;
 const proxies = [];
 const owners = new Map();
 const cups = [];
@@ -70,6 +71,12 @@ async function boot() {
   G.lights = makeLights(scene, quality.q);
 
   phys = new Physics();
+  // 拿在手上的杯子：碰到機台、牆、柱子這些固定的大東西會被擋住（沿著表面滑），其他小東西都穿過去
+  G.cc = phys.world.createCharacterController(0.002);
+  G.cc.setSlideEnabled?.(true);
+  G.cc.setApplyImpulsesToDynamicBodies?.(false);
+  G.cc.enableAutostep?.(0.045, 0.01, false); // 封膜機底座這種小台階，杯子會自己跨上去
+  G.ccFlags = R.QueryFilterFlags?.ONLY_FIXED ?? ((R.QueryFilterFlags?.EXCLUDE_DYNAMIC ?? 4) | (R.QueryFilterFlags?.EXCLUDE_KINEMATIC ?? 2));
   M = makeMaterials();
   buildShop(scene, phys, M, proxies);
   addUrnStand();
@@ -84,6 +91,9 @@ async function boot() {
   buildStreet(scene, phys);
   traffic = new Traffic(scene);
   scoops = wells.list.map((w) => new Scoop(scene, phys, M, w, owners));
+  iceScoop = new Scoop(scene, phys, M, { ice: true, top: 'ice', x: L.iceBin.x, info: { id: 'ice', color: '#eaf6ff', shape: 'ice' } }, owners);
+  scoops.push(iceScoop);
+  rag = new Rag(scene);
   items = new Items(scene, quality.q.particles);
   puddles = new Puddles(scene);
 
@@ -113,7 +123,7 @@ async function boot() {
   // ?test=1：用計時器跑（背景分頁也會動），給自動測試用
   if (params.has('test')) setInterval(tick, 33);
   else rend.r.setAnimationLoop(tick);
-  window.__dbg = { THREE, scene, Customer, makeLook, rend, surfaceAt, computeTarget, proxies, G, cups, hands, customers, scoops, urns, syrup, sealer, input, camera, items, puddles, frame, onPress, onRelease, makeCustomer, toWindow, CONFIG, L };
+  window.__dbg = { rag, THREE, scene, Customer, makeLook, rend, surfaceAt, computeTarget, proxies, G, cups, hands, customers, scoops, urns, syrup, sealer, input, camera, items, puddles, frame, onPress, onRelease, makeCustomer, toWindow, CONFIG, L };
 }
 
 // 先把會用到的著色器編譯好（第一次拿杯子、倒茶時才不會卡一下）
@@ -155,7 +165,7 @@ function addUrnStand() {
   }
   const shelf = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.015, z1 - z0), M.steelDark);
   shelf.position.set((x0 + x1) / 2, Y + 0.06, (z0 + z1) / 2); shelf.receiveShadow = true; scene.add(shelf);
-  phys.fixedBox((x0 + x1) / 2, Y + h / 2, (z0 + z1) / 2, (x1 - x0) / 2, h / 2, (z1 - z0) / 2);
+  phys.fixedBox((x0 + x1) / 2, Y + h / 2, (z0 + z1) / 2, (x1 - x0) / 2, h / 2, (z1 - z0) / 2, { groups: GROUPS.machine });
   const p = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, h, z1 - z0));
   p.position.set((x0 + x1) / 2, Y + h / 2, (z0 + z1) / 2); p.userData = { kind: 'surface' }; p.updateMatrixWorld(true);
   proxies.push(p);
@@ -193,7 +203,7 @@ function updateCamera(dt) {
     for (const h of hands) {
       if (!(h.pressed || h.hovering || h.ptr != null)) continue;
       if (h.moved) h.moveT = G.t;
-      if (!(G.t - (h.moveT ?? -9) < 0.35)) continue; // 手停著不動：視角也不動
+      if (!(G.t - (h.moveT ?? -9) < 0.12)) continue; // 手停著不動：視角也馬上停（不然手底下的東西會跑掉）
       const b = Math.atan2(-(h.target.x - camera.position.x), -(h.target.z - camera.position.z));
       const wgt = h.pressed ? 2 : 1;
       sum += b * wgt; wsum += wgt;
@@ -308,7 +318,7 @@ function cupTopAt(x, z, hand, pad = 0.02) {
 }
 
 function computeTarget(h, out) {
-  const s = surfaceAt(h.sx + (h.ox || 0), h.sy + (h.oy || 0), ['cup', 'scoop', 'ice'].includes(h.held?.kind));
+  const s = surfaceAt(h.sx + (h.ox || 0), h.sy + (h.oy || 0), ['cup', 'scoop', 'ice', 'rag'].includes(h.held?.kind));
   const P = s.point;
   h.surf = s;
   const held = h.held;
@@ -316,11 +326,25 @@ function computeTarget(h, out) {
     const top = cupTopAt(P.x, P.z, h, held?.kind === 'scoop' ? 0.045 : 0.03);
     if (top > P.y) P.y = top + (held?.kind === 'scoop' ? 0.012 : 0.0);
   }
-  if (held?.kind === 'cup') {
+  if (held?.kind === 'rag') {
+    // 抹布貼著台面：手掌壓在抹布上
+    out.copy(P); if (s.kind !== 'air') out.y += 0.03;
+  } else if (held?.kind === 'cup') {
+    if (s.kind === 'well' || s.kind === 'ice') P.y = Y; // 拿著杯子經過料槽、冰桶：保持在台面高度，不會往洞裡掉
     if (s.kind !== 'air') P.y += H / 2 + 0.012;
     out.copy(P).add(cupHandOffset(h));
   } else if (held?.kind === 'scoop') {
-    if (s.kind !== 'air') P.y += s.kind === 'well' ? 0.028 : 0.034;
+    if (s.kind !== 'air') P.y += s.kind === 'well' ? 0.028 : s.kind === 'ice' ? 0.004 : 0.034;
+    // 空的冰鏟移到有冰的杯子上：伸進杯子裡（去冰：把冰刮出來）
+    const sc = held.scoop;
+    if (sc.isIce && sc.load < sc.max) {
+      for (const c of cups) {
+        if (!c.alive || c.sealed || c.taken || c.ice <= 0 || c.up.y < 0.8 || (c === sc.noDip && G.t - sc.noDipT < 0.8)) continue;
+        if (!(sc.load < 1 || sc.noPour === c)) continue; // 正在刮這一杯：一直伸在杯裡，直到刮完或冰鏟滿了
+        const rim = c.rimCenter(_v2);
+        if (Math.hypot(P.x - rim.x, P.z - rim.z) < CUP.rTop + 0.02) { P.set(rim.x, rim.y - 0.04, rim.z); break; }
+      }
+    }
     h.bowlTarget = P.clone();
     out.copy(P).add(held.scoop.handleOffset(held.q || _q.identity()));
   } else if (held?.kind === 'lever' || held?.kind === 'syrup') {
@@ -377,6 +401,7 @@ function poseHand(h, dt) {
   else if (held?.kind === 'scoop') { pose = 'fist'; pitch = -0.15; roll = h.side * 0.3; yaw = G.yaw * 0.6; }
   else if (!(h.hovering || h.ptr != null || h.pressed) && h.idle > 1) { yaw = G.yaw - h.side * 0.25; }
   else if (held?.kind === 'ice') { pose = 'pinch'; pitch = -0.35; }
+  else if (held?.kind === 'rag') { pose = 'open'; pitch = -0.04; roll = 0; }
   else if (held?.kind === 'lever' || held?.kind === 'syrup') { pose = 'point'; pitch = -0.6; }
   else if (h.pressed) { pose = 'fist'; pitch = -0.4; }
   else if (!(h.hovering || h.ptr != null) && h.idle > 1) { pose = 'open'; pitch = -0.1; }
@@ -397,6 +422,7 @@ function pickAt(h) {
   const objs = [...PICK];
   for (const c of cups) if (c.alive && !c.taken && !c.dropped) objs.push(c.pick);
   for (const s of scoops) objs.push(s.pick);
+  if (!rag.held) objs.push(rag.pick);
   const hits = ray.intersectObjects(objs, false);
   // 杯子、勺子優先（它們比較小）
   const pref = hits.find((x) => x.object.userData.kind === 'cup' || x.object.userData.kind === 'scoop');
@@ -440,9 +466,10 @@ function onPress(h) {
       h.held = { kind: 'cup', cup: c }; c.grab(h); G.lastCup = c; sfx.grab();
       return;
     }
-    case 'ice': { h.held = { kind: 'ice' }; h.model.ice.visible = true; sfx.clink(); spend('ingredients', MON.ice); return; }
+    case 'ice': { if (!iceScoop.held) { grabScoop(h, iceScoop); return; } break; } // 冰桶：拿冰鏟（不用手抓冰）
     case 'lever': { h.held = { kind: 'lever', urn: p.urn }; G.didTap = true; return; } // 按住才出茶
     case 'syrupBtn': { syrup.pressed = true; h.held = { kind: 'syrup' }; sfx.button(); return; }
+    case 'rag': { if (rag.held) break; rag.held = h; h.held = { kind: 'rag' }; sfx.grab(); return; }
   }
   h.held = { kind: 'air' }; h.dwellKey = null; h.dwellT = 0;
   void other;
@@ -450,6 +477,7 @@ function onPress(h) {
 
 function grabScoop(h, s) {
   h.held = { kind: 'scoop', scoop: s, q: new THREE.Quaternion() };
+  s.grabT = G.t; s.wasOut = false; s.noDip = s.noPour = null;
   s.grab(h); sfx.grab();
 }
 
@@ -506,7 +534,11 @@ function onRelease(h) {
   } else if (held.kind === 'scoop') {
     held.scoop.release(throwVel(h));
     if (held.scoop.load > 0 && held.scoop.mode === 'free') {
-      for (let i = 0; i < held.scoop.load; i++) items.spawn(TOP_INFO[held.scoop.loadType].shape === 'ball' ? 'ball' : 'cube', held.scoop.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.02, 0.01, (Math.random() - 0.5) * 0.02)), new THREE.Vector3((Math.random() - 0.5) * 0.5, 0.3, (Math.random() - 0.5) * 0.5), { top: held.scoop.loadType, color: TOP_INFO[held.scoop.loadType].color });
+      for (let i = 0; i < held.scoop.load; i++) {
+        const sp = held.scoop.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.02, 0.01, (Math.random() - 0.5) * 0.02)), sv = new THREE.Vector3((Math.random() - 0.5) * 0.5, 0.3, (Math.random() - 0.5) * 0.5);
+        if (held.scoop.isIce) items.spawn('ice', sp, sv);
+        else items.spawn(TOP_INFO[held.scoop.loadType].shape === 'ball' ? 'ball' : 'cube', sp, sv, { top: held.scoop.loadType, color: TOP_INFO[held.scoop.loadType].color });
+      }
       held.scoop.setLoad(0);
     }
   } else if (held.kind === 'ice') {
@@ -523,6 +555,12 @@ function onRelease(h) {
       }
     }
     items.spawn('ice', p, iv);
+  } else if (held.kind === 'rag') {
+    // 放開：平放在手底下的台面上；伸到台面外放開就回到原位
+    rag.held = null;
+    const s = h.surf;
+    if (s && s.kind === 'surface') rag.place(new THREE.Vector3(rag.pos.x, s.point.y + 0.007, rag.pos.z), rag.yaw);
+    else rag.place(rag.home, 0.3);
   } else if (held.kind === 'syrup') {
     syrup.pressed = false;
   }
@@ -572,48 +610,123 @@ function updateHeld(dt) {
       const center = _v.copy(h.pos).sub(cupHandOffset(h));
       c.setHeldCollision(false); // 拿在手上：穿過其他杯子，不會推倒
       // 跟著手的加速度晃一點
-      const tx = THREE.MathUtils.clamp(-h.acc.z * 0.003, -0.2, 0.2), tz = THREE.MathUtils.clamp(h.acc.x * 0.003, -0.2, 0.2);
+      const tx = THREE.MathUtils.clamp(-h.acc.z * 0.0015, -0.1, 0.1), tz = THREE.MathUtils.clamp(h.acc.x * 0.0015, -0.1, 0.1);
       c.tiltX = (c.tiltX || 0) + (tx - (c.tiltX || 0)) * Math.min(1, dt * 10);
       c.tiltZ = (c.tiltZ || 0) + (tz - (c.tiltZ || 0)) * Math.min(1, dt * 10);
       _q.setFromEuler(_e.set(c.tiltX, 0, c.tiltZ));
-      c.moveTo(center, _q);
+      // 撞到機台等固定的大東西：擋住；撞得快會灑一點
+      const want = center.clone().sub(c.pos);
+      let next = center;
+      try {
+        G.cc.computeColliderMovement(c.collider, { x: want.x, y: want.y, z: want.z }, G.ccFlags, GROUPS.machineQuery); // 只有機台會擋
+        const mv = G.cc.computedMovement();
+        next = c.pos.clone().add(new THREE.Vector3(mv.x, mv.y, mv.z));
+        const blocked = want.length() - Math.hypot(mv.x, mv.y, mv.z);
+        if (blocked > 0.03 && h.vel.length() > 1.8 && !c.sealed && c.fill > 0.05 && G.t - (c.bumpT || 0) > 0.5) {
+          c.bumpT = G.t; spillFrom(c, 0.02 + Math.min(0.05, (h.vel.length() - 1.8) * 0.03), h.vel.clone().multiplyScalar(-0.3)); sfx.clink();
+        }
+      } catch (e) { next = center; }
+      c.moveTo(next, _q);
+      // 拿太快（急停、急甩）：沒封膜的杯子會晃出來
+      if (!c.sealed && c.level > 0.5) {
+        const a = h.acc.length(), thr = 40 + (1 - Math.min(1, c.level)) * 100; // 要很用力急甩才會晃出來
+        if (a > thr && G.t - (c.sloshT || 0) > 0.08) { c.sloshT = G.t; spillFrom(c, Math.min(0.03, (a - thr) * 0.0006), h.vel.clone().multiplyScalar(0.3)); }
+      }
       detectShake(h, c, dt);
     } else if (held.kind === 'scoop') {
       const s = held.scoop;
       if (s.held !== h) { h.held = null; continue; }
       const bowl = h.pos.clone().sub(s.handleOffset(held.q));
+      // 冰鏟：在冰桶裡移動＝鏟冰；在冰桶上方晃＝把多的冰刮回去
+      const ib = L.iceBin;
+      const inBin = s.isIce && Math.abs(bowl.x - ib.x) < ib.w / 2 && Math.abs(bowl.z - ib.z) < ib.d / 2;
+      // 離開剛倒過／剛刮過的杯子，才可以再對它刮冰／倒冰
+      for (const k of ['noDip', 'noPour']) { const c = s[k]; if (c && (!c.alive || Math.hypot(bowl.x - c.pos.x, bowl.z - c.pos.z) > 0.11)) s[k] = null; }
+      // 鏟冰：冰鏟離開冰桶後再插進去＝滿滿一鏟（約 200g）。剛拿起來的冰鏟是空的
+      const dipped = inBin && bowl.y < Y - 0.006;
+      if (s.isIce && !dipped) s.wasOut = true;
+      if (dipped && s.wasOut && s.load < s.max) {
+        const raw = s.load;
+        s.setLoad(s.max); s.wasOut = false;
+        spend('ingredients', (s.load - raw) * MON.ice);
+        sfx.clink();
+      }
+      // 去冰：空冰鏟伸進杯子裡動一動，把冰一顆一顆刮出來
+      if (s.isIce) {
+        for (const c of cups) {
+          if (!c.alive || c.sealed || c.taken || c.ice <= 0 || (c === s.noDip && G.t - s.noDipT < 0.8)) continue;
+          const rim = c.rimCenter(_v2);
+          if (Math.hypot(bowl.x - rim.x, bowl.z - rim.z) < CUP.rTop && bowl.y < rim.y && s.load < s.max) {
+            s.noPour = c;
+            held.scrape = (held.scrape || 0) + dt * 6; // 一秒刮約 6 顆
+            while (held.scrape >= 1 && c.ice > 0 && s.load < s.max) { held.scrape -= 1; c.takeIce(); s.setLoad(s.load + 1); sfx.clink(); G.lastCup = c; }
+          }
+        }
+      }
       // 在料槽裡移動 → 舀起來
-      const w = wells.at(bowl.x, bowl.z);
+      const w = s.isIce ? null : wells.at(bowl.x, bowl.z);
       // 勺子裡已經有別的料：經過其他料槽不會混到
-      if (w && bowl.y < Y - 0.004 && !(s.load > 0.5 && s.loadType !== w.top)) {
-        const before = Math.round(s.load), raw = s.load;
-        s.setLoad(s.load + (h.frameMove || 0) * CONFIG.pour.scoopPerMeter + dt * 1.5, w.top);
+      // 料：勺子伸進料槽就是滿滿一勺（約 60g）
+      if (w && bowl.y < Y - 0.004 && !(s.load > 0.5 && s.loadType !== w.top) && s.load < s.max) {
+        const raw = s.load;
+        s.setLoad(s.max, w.top);
         spend('ingredients', (s.load - raw) * MON.toppingPiece);
-        if (Math.round(s.load) > before) sfx.scoop();
+        sfx.scoop();
       }
       // 在杯口上方 → 傾倒
       let target = null;
       for (const c of cups) {
         if (!c.alive || c.sealed || c.taken || c.up.y < 0.8) continue;
+        if (c === s.noPour) continue; // 剛從這杯刮出來的冰，不要又倒回去
         const rim = c.rimCenter(_v2);
         if (Math.hypot(bowl.x - rim.x, bowl.z - rim.z) < 0.085 && bowl.y > rim.y - 0.03 && bowl.y < rim.y + 0.3) { target = c; break; }
       }
+      if (target && s.load >= 1) { s.noDip = target; s.noDipT = G.t; } // 剛倒進去的杯子：空勺子停一下才會伸進去刮
       held.tilt = (held.tilt || 0) + ((target ? 1 : 0) - (held.tilt || 0)) * Math.min(1, dt * 9);
       _e.set(-0.05, 0, -h.side * held.tilt * 1.7);
       held.q.setFromEuler(_e);
       s.moveBowl(bowl, held.q);
-      // 勺子經過杯口上方：整勺倒進去（不用停著等）
-      if (target && s.load >= 1) {
+      // 冰鏟在杯口上方：冰一顆一顆慢慢掉進去，移開就停（好控制冰量）
+      if (s.isIce) {
+        if (target && s.load >= 1) {
+          held.drip = (held.drip ?? 0.6) + dt * CONFIG.pour.iceDripRate;
+          const rim = target.rimCenter(new THREE.Vector3());
+          while (held.drip >= 1 && s.load >= 1) {
+            held.drip -= 1;
+            items.spawn('ice', new THREE.Vector3(rim.x + (Math.random() - 0.5) * 0.02, rim.y + 0.03, rim.z + (Math.random() - 0.5) * 0.02), new THREE.Vector3(0, -0.4, 0));
+            s.setLoad(s.load - 1);
+          }
+          G.lastCup = target;
+        } else held.drip = 0.6;
+      }
+      // 料勺經過杯口上方：整勺倒進去（不用停著等）
+      else if (target && s.load >= 1) {
         const info = TOP_INFO[s.loadType];
         const rim = target.rimCenter(new THREE.Vector3());
         const n = Math.round(s.load);
         for (let i = 0; i < n; i++) {
           const from = new THREE.Vector3(rim.x + (Math.random() - 0.5) * 0.03, rim.y + 0.02 + Math.random() * 0.04, rim.z + (Math.random() - 0.5) * 0.03);
-          items.spawn(info.shape === 'ball' ? 'ball' : 'cube', from, new THREE.Vector3((Math.random() - 0.5) * 0.04, -0.3 - Math.random() * 0.3, (Math.random() - 0.5) * 0.04), { top: s.loadType, color: info.color });
+          const v = new THREE.Vector3((Math.random() - 0.5) * 0.04, -0.3 - Math.random() * 0.3, (Math.random() - 0.5) * 0.04);
+          if (s.isIce) items.spawn('ice', from, v);
+          else items.spawn(info.shape === 'ball' ? 'ball' : 'cube', from, v, { top: s.loadType, color: info.color });
         }
         s.setLoad(0);
         sfx.plop();
         G.lastCup = target;
+      }
+    } else if (held.kind === 'rag') {
+      if (rag.held !== h) { h.held = null; continue; }
+      const s = h.surf;
+      const onSurf = s && s.kind === 'surface';
+      const y = onSurf ? s.point.y + 0.007 : h.pos.y - 0.025;
+      rag.yaw += THREE.MathUtils.clamp((h.vel.x - h.vel.z) * 0.6, -3, 3) * dt; // 擦的時候布會轉一點
+      rag.place(new THREE.Vector3(h.pos.x, y, h.pos.z), rag.yaw);
+      if (onSurf && (h.frameMove || 0) > 0.0005) {
+        const r = puddles.wipe(h.pos.x, s.point.y + 0.0015, h.pos.z, 0.085, (h.frameMove || 0) * 0.16);
+        if (r.removed > 0) rag.soak(r.removed * 2.5, r.color);
+        const n = items.sweep(h.pos.x, s.point.y, h.pos.z, 0.085);
+        if ((r.removed > 0 || n) && Math.random() < 0.35) sfx.wipe();
+        if (r.removed > 0) puddles.update();
       }
     } else if (held.kind === 'syrup') {
       const btn = _v.set(L.syrup.x, Y + 0.34, L.syrup.z);
@@ -630,7 +743,7 @@ function updateHeld(dt) {
           const sc = scoops.find((x) => x.well.top === h.surf.data.top && !x.held);
           if (sc) { grabScoop(h, sc); continue; }
         } else {
-          h.held = { kind: 'ice' }; h.model.ice.visible = true; sfx.clink(); spend('ingredients', MON.ice); continue;
+          if (!iceScoop.held) { grabScoop(h, iceScoop); continue; }
         }
       }
       // 握拳的手碰到開關／按鈕＝按下去（電腦版第二隻手就是這樣操作）
@@ -718,6 +831,8 @@ function updatePouring(dt) {
     } else u.stream.hide();
   }
   syrup.update(dt);
+  // 果糖機面板：出口下面有杯子就顯示那杯的甜度
+  { const hit = rcast(syrup.nozzle.clone().add(new THREE.Vector3(0, -0.004, 0)), 0.4); const cu = hit?.owner instanceof Cup && !hit.owner.sealed ? hit.owner : null; syrup.setDisplay(cu ? cu.sugar : null); }
   if (syrup.press > 0.5) {
     flows += 0.5;
     pourSource(syrup.nozzle, syrup.stream, dt, CONFIG.pour.syrupRate, (c, a) => c.addSugar(a) * CONFIG.pour.syrupVolume, '#f2c76a', true);
@@ -764,6 +879,8 @@ function updateCups(dt) {
     c.sync();
     c.updateVisual(dt);
     c.age += dt;
+    // 冰塊泡在茶裡一段時間＝冰鎮過
+    if (!c.chilled && c.ice > 0 && c.fill > 0.1) { c.chillT += dt; if (c.chillT >= CONFIG.pour.chillSeconds) c.chilled = true; }
     if (c.taken) continue;
     // 傾斜灑出
     if (!c.sealed && c.level > 0.01) {
@@ -1101,6 +1218,7 @@ function addScore(n, pos, quiet, label) {
 }
 
 // ---------------- 提示（前兩杯）----------------
+const iceInfo = (id) => CONFIG.menu.ice.find((x) => x.id === id) || {};
 function updateHint() {
   if (G.phase !== 'play' || !G.hintsOn) { hud.setHint(''); return; }
   const w = G.win;
@@ -1111,10 +1229,11 @@ function updateHint() {
   const o = w.order;
   let t = '';
   if (!cup) t = `${press}<b>杯架</b>拿一個杯子`;
-  else if (o.top && cup.tops[o.top] < 6 && !cup.sealed) t = `${press}料槽裡的<b>勺子</b>，在槽裡撈一撈，再移到杯口倒`;
-  else if (cup.ice < (o.ice === 'none' ? 0 : o.ice === 'less' ? 1 : 3) && !cup.sealed) t = `${press}<b>冰桶</b>抓冰塊，在杯口放開`;
+  else if (o.top && cup.tops[o.top] < 6 && !cup.sealed) t = `${press}料槽裡的<b>勺子</b>（伸進去就是一勺），移到杯口倒`;
+  else if (w.rule?.iceExact == null && !cup.sealed && cup.ice < Math.max(1, iceInfo(o.ice).min) && iceInfo(o.ice).chilled !== false && !(o.ice === 'none' && cup.chilled)) t = `${press}<b>冰桶</b>的冰鏟，拿起來再<b>插進冰桶</b>＝一整鏟；移到杯口上方冰會<b>一顆一顆</b>掉進去，夠了就移開`;
   else if (cup.level < 0.75 && !cup.sealed) t = urns.some((u) => u.open) ? '倒到八分滿就<b>放開開關</b>' : '杯子放到<b>茶桶</b>下的圈裡，<b>按住開關</b>出茶';
-  else if (Math.abs(cup.sugar - o.sweet) > 1 && !cup.sealed) t = `杯子放到<b>果糖機</b>下，${press}按鈕`;
+  else if (o.ice === 'none' && cup.ice > 0 && !cup.sealed) t = cup.chilled ? '去冰：用<b>空的冰鏟</b>伸進杯子，把冰刮出來' : '去冰：等一下，讓冰塊冰鎮一下茶';
+  else if (Math.abs(cup.sugar - o.sweet) > CONFIG.menu.sweetTolerance && !cup.sealed) t = `杯子放到<b>果糖機</b>下的圈，${press}按鈕，看機器上的 cc 數`;
   else if (!cup.sealed) t = '把杯子放進<b>封膜機</b>';
   else if (cup.mix < 1) t = '拿著杯子<b>上下快速晃</b>搖勻';
   else t = '交給客人：<b>伸到窗口放開</b>，或放在出餐台';
@@ -1146,6 +1265,9 @@ function frame(dt) {
   if (G.wastePop > 0 && (G.wastePopT = (G.wastePopT || 0) + dt) > 0.9) { hud.popup(G.wastePos, `灑出來 −${G.wastePop}`, 'bad small'); G.wastePop = 0; G.wastePopT = 0; }
   const show = hands.map((h) => h.held?.cup).find(Boolean) || (G.lastCup?.alive && !G.lastCup.taken && !G.lastCup.dropped ? G.lastCup : null);
   hud.showCup(G.phase === 'play' ? show : null);
+  // 拿著勺子／冰鏟：旁邊顯示裡面有幾顆
+  const sh = hands.find((h) => h.held?.kind === 'scoop');
+  hud.showTool(G.phase === 'play' && sh ? sh.held.scoop.pos : null, sh ? `${sh.held.scoop.isIce ? '冰' : TOP_INFO[sh.held.scoop.loadType].name} ${Math.round(sh.held.scoop.load)} 顆` : '');
   updateHint();
   hud.update(dt);
   rend.render();
@@ -1161,6 +1283,7 @@ function startShift() {
   items.clear(); puddles.clear();
   for (const u of urns) u.open = false;
   for (const s of scoops) { s.setLoad(0); s.toRest(true); }
+  rag.reset();
   Object.assign(G, { phase: 'play', left: CONFIG.shift.seconds, score: 0, win: null, queue: [], spawned: 0, spawnT: 0.5, no: 0, served: [], wasteAcc: 0, wastePop: 0, lastCup: null, yaw: 0 });
   G.stats = { served: 0, perfect: 0, repelled: 0, hitGood: 0, waste: 0, dropped: 0, oneIce: 0 };
   G.money = { revenue: 0, ingredients: 0, cups: 0, comp: 0 };

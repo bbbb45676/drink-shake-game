@@ -157,6 +157,12 @@ export function drawLogo(g, cx, cy, r, { ring = PALETTE.teal, fill = PALETTE.cre
 export function cupPrintTex() {
   const c = canvas(1024, 256), g = c.getContext('2d');
   g.clearRect(0, 0, 1024, 256);
+  // 8 分線（茶加到這條線）
+  g.strokeStyle = 'rgba(62,38,24,.75)'; g.lineWidth = 3; g.setLineDash([14, 8]);
+  for (const [a, b] of [[0, 185], [327, 697], [839, 1024]]) { g.beginPath(); g.moveTo(a, 51); g.lineTo(b, 51); g.stroke(); }
+  g.setLineDash([]);
+  g.fillStyle = 'rgba(62,38,24,.8)'; g.font = `22px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'bottom';
+  g.fillText('8分', 512, 46);
   g.fillStyle = 'rgba(44,122,115,.92)'; g.fillRect(0, 150, 1024, 22);
   g.fillStyle = 'rgba(244,232,212,.9)'; g.fillRect(0, 176, 1024, 6);
   for (let i = 0; i < 2; i++) {
@@ -217,6 +223,29 @@ export function menuTex() {
     g.fillStyle = PALETTE.orange; g.textAlign = 'right'; g.fillText(String(p), x + 420, y);
     g.strokeStyle = 'rgba(62,38,24,.15)'; g.setLineDash([4, 8]); g.beginPath(); g.moveTo(x, y + 40); g.lineTo(x + 420, y + 40); g.stroke(); g.setLineDash([]);
   });
+  return tex(c);
+}
+
+// 配方表（貼在右牆，跟真的手搖店一樣）
+export function recipeTex(menu) {
+  const c = canvas(1024, 1000), g = c.getContext('2d');
+  g.fillStyle = '#fffaf0'; g.fillRect(0, 0, 1024, 1000);
+  g.fillStyle = PALETTE.teal; g.fillRect(0, 0, 1024, 110);
+  g.fillStyle = '#fffaf0'; g.font = `56px ${FONT}`; g.textBaseline = 'middle'; g.textAlign = 'left';
+  g.fillText('標準配方　大杯 700cc', 40, 58);
+  const sec = (y, title) => { g.fillStyle = PALETTE.orange; g.fillRect(40, y - 24, 10, 48); g.fillStyle = PALETTE.brown; g.font = `42px ${FONT}`; g.fillText(title, 64, y); };
+  const row = (x, y, k, v, w = 130) => { g.font = `36px ${FONT}`; g.fillStyle = PALETTE.brown; g.fillText(k, x, y); g.fillStyle = PALETTE.teal; g.fillText(v, x + w, y); };
+  sec(160, '甜度：果糖 cc（按住果糖機，看面板 cc 數）');
+  menu.sweet.slice().reverse().forEach((s, i) => row(80 + (i % 3) * 310, 222 + ((i / 3) | 0) * 54, s.name, `${s.v}cc`, 100));
+  sec(345, '冰量（一顆約 25g，一鏟約 200g）');
+  menu.ice.forEach((s, i) => row(80, 405 + i * 54, s.name, s.recipe, 190));
+  sec(700, '茶、加料、出杯');
+  g.font = `36px ${FONT}`; g.fillStyle = PALETTE.brown;
+  g.fillText('茶加到杯子上的 8 分線（冰越少，茶越多）', 80, 762);
+  g.fillText('加料一勺約 60g　→　封膜　→　搖 10 下　→　出杯', 80, 818);
+  g.fillStyle = 'rgba(62,38,24,.55)'; g.font = `30px ${FONT}`;
+  g.fillText('去冰：先加一鏟冰、倒茶冰鎮，再用空冰鏟把冰刮掉，茶補到 8 分線', 80, 890);
+  g.fillText('少糖 70%・半糖 50%・微糖 30%（以全糖 40cc 為準）', 80, 940);
   return tex(c);
 }
 

@@ -70,6 +70,24 @@ export class Puddles {
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
   clear() { this.list = []; this.dirty = true; this.update(); }
+
+  // 抹布擦過：同一個表面上、在抹布範圍內的水漬變小；太小就不見
+  wipe(x, y, z, rad, amount) {
+    let removed = 0, color = null;
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const p = this.list[i];
+      if (Math.abs(p.y - y) > 0.02) continue;
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d > p.r + rad) continue;
+      const overlap = Math.min(1, (p.r + rad - d) / (rad * 2));
+      const take = Math.min(p.area, amount * (0.4 + overlap));
+      p.area -= take; removed += take; color = p.color;
+      p.r = Math.sqrt(Math.max(0, p.area));
+      if (p.area < 0.0004) { removed += p.area; this.list.splice(i, 1); }
+      this.dirty = true;
+    }
+    return { removed, color };
+  }
 }
 
 // ---------------- 掉落物：珍珠、椰果、仙草、冰塊、液滴 ----------------
@@ -178,6 +196,18 @@ export class Items {
   }
 
   clear() { this.list = []; this.draw(); }
+
+  // 抹布擦過：把掉在台面上的料、冰塊擦掉
+  sweep(x, y, z, rad) {
+    let n = 0;
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const it = this.list[i];
+      if (it.kind === 'drop' || !it.resting) continue;
+      if (Math.abs(it.p.y - y) > 0.05 || Math.hypot(it.p.x - x, it.p.z - z) > rad) continue;
+      this.list.splice(i, 1); n++;
+    }
+    return n;
+  }
 }
 
 // 一團噴濺：給位置、方向、顏色

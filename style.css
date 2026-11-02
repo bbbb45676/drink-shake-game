@@ -46,6 +46,7 @@ body.playing #gl { cursor: none; }
 #ticket .t-row span { color: var(--brown-60); }
 #ticket .t-row b { font-weight: 400; font-size: 16px; }
 #ticket .t-row.hot b { color: var(--red); }
+#ticket .t-rec { text-align: right; font-size: 11px; color: var(--teal); margin: -3px 0 2px; }
 #ticket .t-special { margin-top: 4px; color: var(--red); font-size: 15px; }
 #ticket .t-rude { font-size: 18px; color: var(--red); line-height: 1.35; margin: 4px 0 2px; }
 #ticket .t-note { color: var(--brown-60); font-size: 12px; }
@@ -65,6 +66,8 @@ body.playing #gl { cursor: none; }
 #cup-tag span { background: rgba(255, 251, 243, .92); color: var(--brown); padding: 2px 7px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.15); white-space: nowrap; }
 #cup-tag .c-tea i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 #cup-tag .c-ok { background: var(--teal); color: #fff; }
+
+#tool-tag { position: absolute; z-index: 3; transform: translate(-50%, -100%); background: rgba(62, 38, 24, .85); color: var(--cream); padding: 2px 9px; border-radius: 10px; font-size: 13px; white-space: nowrap; }
 
 /* 提示 */
 #hint { position: absolute; z-index: 4; left: 50%; bottom: calc(18px + var(--safe-b)); transform: translateX(-50%); background: rgba(62, 38, 24, .86); color: var(--cream); padding: 9px 16px; border-radius: 22px; font-size: 15px; max-width: 92vw; text-align: center; backdrop-filter: blur(6px); }
@@ -104,7 +107,8 @@ kbd { font-family: inherit; display: inline-block; background: var(--brown); col
 .rules[open] summary::after { content: ' ▴'; }
 .rules table { width: 100%; border-collapse: collapse; margin-top: 4px; }
 .rules td { padding: 4px 6px; border-bottom: 1px dashed var(--brown-15); line-height: 1.35; }
-.rules td.p, .rules td.m { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rules td.p, .rules td.m { text-align: right; font-variant-numeric: tabular-nums; }
+.rules td.m { white-space: nowrap; }
 .rules td.p { color: var(--teal); }
 .rules td.m { color: var(--red); }
 .snd { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--brown-60); margin-bottom: 10px; }

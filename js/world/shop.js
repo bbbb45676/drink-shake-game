@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Builder, std } from '../gfx/builder.js';
-import { brushedTex, woodTex, tileTex, menuTex, signTex, softCircleTex, drawLogo, canvas, tex } from '../gfx/textures.js';
-import { L, PALETTE, FONT } from '../config.js';
+import { brushedTex, woodTex, tileTex, menuTex, signTex, softCircleTex, drawLogo, canvas, tex, recipeTex } from '../gfx/textures.js';
+import { L, PALETTE, FONT, CONFIG } from '../config.js';
 
 // 共用材質
 export function makeMaterials() {
@@ -110,17 +110,22 @@ export function buildShop(scene, phys, M, proxies) {
   scene.add(menu);
   B.box(0.04, 0.68, 1.06, M.black, -1.345, 1.85, -0.2, { cast: false });
 
-  // 右牆：層架、杯子備品、小盆栽
+  // 右牆：配方表（靠窗口那邊），層架、杯子備品、小盆栽往裡面移
+  const rmat = new THREE.MeshStandardMaterial({ map: recipeTex(CONFIG.menu), roughness: 0.55 });
+  const recipe = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.762), rmat);
+  recipe.position.set(1.324, 1.78, -0.52); recipe.rotation.y = -Math.PI / 2;
+  scene.add(recipe);
+  B.box(0.02, 0.8, 0.82, M.teal, 1.338, 1.78, -0.52, { cast: false });
   for (const y of [1.45, 1.85]) {
-    B.box(0.26, 0.025, 0.9, M.wood, 1.21, y, -0.15, {});
+    B.box(0.26, 0.025, 0.6, M.wood, 1.21, y, 0.32, {});
   }
   const boxMat = std({ color: '#e7d6bd', roughness: 0.9 });
-  for (let i = 0; i < 4; i++) B.box(0.2, 0.18, 0.18, boxMat, 1.22, 1.555, -0.5 + i * 0.22, { round: 0.01 });
+  for (let i = 0; i < 3; i++) B.box(0.2, 0.18, 0.18, boxMat, 1.22, 1.555, 0.1 + i * 0.2, { round: 0.01 });
   const pot = std({ color: '#c46a45', roughness: 0.7 }), leaf = std({ color: '#3f7a46', roughness: 0.6 });
-  B.add(new THREE.CylinderGeometry(0.07, 0.055, 0.12, 16), pot, { pos: [1.2, 1.925, -0.45] });
+  B.add(new THREE.CylinderGeometry(0.07, 0.055, 0.12, 16), pot, { pos: [1.2, 1.925, 0.2] });
   for (let i = 0; i < 7; i++) {
     const a = (i / 7) * Math.PI * 2;
-    B.add(new THREE.SphereGeometry(0.045, 10, 8), leaf, { pos: [1.2 + Math.cos(a) * 0.05, 2.02 + (i % 2) * 0.04, -0.45 + Math.sin(a) * 0.05], scale: [1, 1.6, 0.7], rot: [0, a, 0.4] });
+    B.add(new THREE.SphereGeometry(0.045, 10, 8), leaf, { pos: [1.2 + Math.cos(a) * 0.05, 2.02 + (i % 2) * 0.04, 0.2 + Math.sin(a) * 0.05], scale: [1, 1.6, 0.7], rot: [0, a, 0.4] });
   }
 
   // ---- 吊燈（店內，竹編燈罩）----

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from '../gfx/builder.js';
 import { urnLabelTex, tagTex, filmTex, rng } from '../gfx/textures.js';
-import { L, CUP, CONFIG, PALETTE } from '../config.js';
+import { L, CUP, CONFIG, PALETTE, FONT } from '../config.js';
+import { GROUPS } from '../play/physics.js';
 
 const Y = L.counterY;
 const teaById = (id) => CONFIG.menu.teas.find((t) => t.id === id);
@@ -91,7 +92,7 @@ export class Urn {
     this.group = g;
     this.nozzle = new THREE.Vector3(x, base + 0.006, z + 0.178);
 
-    phys.fixedCylinder(x, base + 0.19, z, 0.19, 0.106);
+    phys.fixedCylinder(x, base + 0.19, z, 0.19, 0.106, { groups: GROUPS.machine });
 
     // 點開關的範圍（比把手大一點，手指好按）
     const pick = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6));
@@ -120,8 +121,11 @@ export class Syrup {
     const g = new THREE.Group(); g.position.set(x, Y, z); scene.add(g);
     const body = new THREE.Mesh(new RoundedBoxGeometry(0.17, 0.32, 0.2, 3, 0.02), M.steel);
     body.position.y = 0.16; body.castShadow = body.receiveShadow = true; g.add(body);
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.06), new THREE.MeshStandardMaterial({ map: tagTex('果糖', { bg: '#2a2420', fg: '#ffb35c' }), emissive: '#ffffff', roughness: 0.3 }));
-    panel.material.emissiveMap = panel.material.map; panel.material.emissiveIntensity = 0.5;
+    // 液晶面板：平常顯示「果糖」，杯子在出口下面時顯示這杯的甜度
+    this.lcd = document.createElement('canvas'); this.lcd.width = 256; this.lcd.height = 112;
+    this.lcdTex = new THREE.CanvasTexture(this.lcd); this.lcdTex.colorSpace = THREE.SRGBColorSpace;
+    this.setDisplay(null);
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.057), new THREE.MeshStandardMaterial({ map: this.lcdTex, emissive: '#ffffff', emissiveMap: this.lcdTex, emissiveIntensity: 0.6, roughness: 0.3 }));
     panel.position.set(0, 0.25, 0.1005); g.add(panel);
     const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.006, 0.05, 12), M.steelDark);
     nozzle.position.set(0, 0.185, 0.145); g.add(nozzle);
@@ -132,7 +136,7 @@ export class Syrup {
     ring.position.set(0, 0.326, 0.02); g.add(ring);
     this.btn = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.022, 24), M.orange);
     this.btn.position.set(0, 0.338, 0.02); this.btn.castShadow = true; g.add(this.btn);
-    phys.fixedBox(x, Y + 0.16, z, 0.085, 0.16, 0.1);
+    phys.fixedBox(x, Y + 0.16, z, 0.085, 0.16, 0.1, { groups: GROUPS.machine });
     this.nozzle = new THREE.Vector3(x, Y + 0.16, z + 0.145);
     this.ring = cupRing(scene, x, z + 0.145, PALETTE.orange);
     this.pressed = false; this.press = 0;
@@ -147,6 +151,18 @@ export class Syrup {
     this.stream = new Stream(scene, '#f2c76a', 0.0035);
     this.stream.mat.opacity = 0.75;
   }
+  setDisplay(v) {
+    const text = v == null ? '果糖' : `${v.toFixed(1)} cc`;
+    if (text === this.lcdText) return;
+    this.lcdText = text;
+    const g = this.lcd.getContext('2d');
+    g.fillStyle = '#1e1a17'; g.fillRect(0, 0, 256, 112);
+    g.fillStyle = v == null ? '#ffb35c' : '#7dffb0';
+    g.font = `${v == null ? 64 : 58}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, 128, 60);
+    this.lcdTex.needsUpdate = true;
+  }
+
   update(dt) {
     this.press += ((this.pressed ? 1 : 0) - this.press) * Math.min(1, dt * 20);
     this.btn.position.y = 0.338 - this.press * 0.01;
@@ -285,9 +301,9 @@ export class Sealer {
     const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.035), new THREE.MeshStandardMaterial({ map: tagTex('封膜機', { bg: '#1f5a55' }), roughness: 0.5 }));
     tag.position.set(-0.04, 0.36, 0.1255); g.add(tag);
 
-    phys.fixedBox(x, Y + 0.015, z, 0.13, 0.015, 0.17);
-    phys.fixedBox(x, Y + 0.21, z - 0.105, 0.13, 0.21, 0.065);
-    phys.fixedBox(x, Y + 0.36, z, 0.13, 0.055, 0.125);
+    phys.fixedBox(x, Y + 0.015, z, 0.13, 0.015, 0.17, { groups: GROUPS.machine });
+    phys.fixedBox(x, Y + 0.21, z - 0.105, 0.13, 0.21, 0.065, { groups: GROUPS.machine });
+    phys.fixedBox(x, Y + 0.36, z, 0.13, 0.055, 0.125, { groups: GROUPS.machine });
 
     const blk = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.03, 0.34));
     blk.position.set(x, Y + 0.015, z); blk.userData = { kind: 'surface' }; blk.updateMatrixWorld(true);

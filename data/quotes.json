@@ -16,7 +16,7 @@
     { "id": "shake100", "line": "幫我搖 100 下，我會聽。", "ticket": "搖 100 下", "rule": { "shakeCount": 100 } },
     { "id": "same", "line": "跟上次一樣的。", "ticket": "跟上次一樣（？）", "rule": { "sameAsLast": true } },
     { "id": "ice3", "line": "冰塊三顆就好，四顆會太冰。", "ticket": "冰塊：剛好 3 顆", "rule": { "iceExact": 3 } },
-    { "id": "coco8", "line": "椰果 8 顆，我在減肥。", "ticket": "椰果：剛好 8 顆", "rule": { "toppingExact": { "coco": 8 } } },
+    { "id": "coco24", "line": "椰果要兩勺，24 顆，我會數。", "ticket": "椰果：剛好 24 顆（兩勺）", "rule": { "toppingExact": { "coco": 24 } } },
     { "id": "sweet12", "line": "甜度 1.2，我最近在控糖。", "ticket": "甜度：1.2", "rule": { "sweetExact": 1.2 } }
   ],
   "rude": [

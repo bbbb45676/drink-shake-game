@@ -78,6 +78,7 @@ export class Cup {
     this.ice = 0;
     this.tops = { pearl: 0, coco: 0, grass: 0 };
     this.sealed = false; this.shakes = 0; this.mix = 0;
+    this.chilled = false; this.chillT = 0; // 冰塊泡在茶裡一段時間＝冰鎮過（去冰要先冰鎮）
     this.held = null; this.locked = false; this.alive = true; this.dropped = false;
     this.age = 0; this.touched = 0;
 
@@ -164,6 +165,7 @@ export class Cup {
   }
   addTop(id) { if (this.sealed) return false; this.tops[id]++; this.dirty = true; return true; }
   addIce() { if (this.sealed) return false; this.ice++; this.dirty = true; return true; }
+  takeIce() { if (this.sealed || this.ice <= 0) return false; this.ice--; this.dirty = true; return true; }
 
   // 依比例倒掉一部分（灑出來）
   lose(frac) {

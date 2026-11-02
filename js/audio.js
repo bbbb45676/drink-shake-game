@@ -63,6 +63,7 @@ export function setPour(level, bright = 1) {
 }
 
 export const sfx = {
+  wipe: () => noise(0.12, { vol: 0.07, freq: 700 + Math.random() * 300, q: 0.7, type: 'lowpass' }),
   grab: () => tone(520, 0.05, { type: 'triangle', vol: 0.08, slide: 1.3 }),
   lever: () => { tone(1500, 0.03, { type: 'square', vol: 0.06 }); noise(0.05, { vol: 0.12, freq: 3000, q: 3 }); },
   button: () => tone(380, 0.06, { type: 'triangle', vol: 0.12, slide: 0.8 }),

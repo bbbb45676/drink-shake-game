@@ -33,7 +33,7 @@ export class Hud {
       html += `<div class="t-rude">${c.quote.ticket}</div><div class="t-note">？？？</div>`;
     } else {
       const rows = ticketRows(c.order, c.rule);
-      html += rows.map(([k, v, hot]) => `<div class="t-row${hot ? ' hot' : ''}"><span>${k}</span><b>${v}</b></div>`).join('');
+      html += rows.map(([k, v, hot, rec]) => `<div class="t-row${hot ? ' hot' : ''}"><span>${k}</span><b>${v}</b></div>${rec ? `<div class="t-rec">${rec}</div>` : ''}`).join('');
       if (c.rule?.shakeCount) html += `<div class="t-special">要搖 ${c.rule.shakeCount} 下</div>`;
       if (c.rule?.sameAsLast) html += `<div class="t-special">跟上次一樣（？）</div>`;
     }
@@ -92,14 +92,25 @@ export class Hud {
     const pct = Math.round(Math.min(1, cup.level) * 100);
     const parts = [];
     parts.push(`<span class="c-tea"><i style="background:${tea ? tea.color : '#ddd'}"></i>${tea ? tea.name : '空杯'} ${pct}%</span>`);
-    parts.push(`<span>甜 ${cup.sugar.toFixed(1)}</span>`);
-    parts.push(`<span>冰 ${cup.ice}</span>`);
+    parts.push(`<span>果糖 ${cup.sugar.toFixed(1)}cc</span>`);
+    parts.push(`<span>冰 ${cup.ice}${cup.ice === 0 && cup.chilled ? '（冰鎮過）' : ''}</span>`);
     for (const t of CONFIG.menu.toppings) if (cup.tops[t.id]) parts.push(`<span>${t.name} ${cup.tops[t.id]}</span>`);
     if (cup.sealed) parts.push(`<span class="c-ok">${cup.mix >= 1 ? '搖勻了' : `搖 ${cup.shakes}/${CONFIG.pour.shakesToMix}`}</span>`);
     if (cup.shakes >= CONFIG.pour.shakesToMix && cup.mix >= 1) parts.push(`<span>${cup.shakes} 下</span>`);
     const html = parts.join('');
     if (html !== this.tagHtml) { this.tag.innerHTML = html; this.tagHtml = html; }
     this.tag.hidden = false;
+  }
+
+  showTool(pos, text) {
+    const el = document.getElementById('tool-tag');
+    if (!pos) { el.hidden = true; this.toolPos = null; return; }
+    this.toolPos = pos;
+    if (text !== this.toolText) { el.textContent = text; this.toolText = text; }
+    el.hidden = false;
+    _v.copy(pos); _v.y += 0.06;
+    const s = this.project(_v);
+    el.style.left = `${s.x}px`; el.style.top = `${s.y}px`;
   }
 
   update(dt) {

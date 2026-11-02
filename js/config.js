@@ -34,7 +34,7 @@ export const CONFIG = {
     topping: 10,           // 加料 +10
     cup: 3,                // 杯子＋封膜
     tea: { black: 6, green: 6, milk: 12 }, // 茶的成本：倒滿一整杯的量
-    syrup: 0.1,            // 果糖：每 1 甜度
+    syrup: 0.025,          // 果糖：每 1cc
     toppingPiece: 0.25,    // 料：每一顆（一勺約 14 顆＝3.5 元）
     ice: 0.3,              // 冰塊：每一顆
     dryCleaning: 150,      // 飲料砸到好客人：賠洗衣費
@@ -55,38 +55,44 @@ export const CONFIG = {
       { id: 'green', name: '綠茶', color: '#c7ae34', label: '#5f8f3a' },
       { id: 'milk', name: '奶茶', color: '#c4946a', label: '#8a5a3a' },
     ],
-    // 甜度：按住果糖機的時間決定（每秒 +4）
+    // 甜度：果糖幾 cc（大杯 700cc）。業界慣例：少糖 70%、半糖 50%、微糖 30%（以全糖為準）
+    // 全糖 40cc 果糖約 40g 糖，加上配料約 60g，跟實測的 700ml 全糖珍奶差不多
     sweet: [
       { v: 0, name: '無糖' },
-      { v: 3, name: '微糖' },
-      { v: 5, name: '半糖' },
-      { v: 7, name: '少糖' },
-      { v: 10, name: '全糖' },
+      { v: 12, name: '微糖' },
+      { v: 20, name: '半糖' },
+      { v: 28, name: '少糖' },
+      { v: 40, name: '全糖' },
     ],
-    sweetTolerance: 1.0,
-    sweetExactTolerance: 0.15,
-    // 冰塊顆數
+    sweetTolerance: 4,          // 一般甜度誤差 ±4cc
+    sweetExactTolerance: 0.6,   // 刁難客「甜度 3.7 分」＝14.8cc，誤差 ±0.6cc（1 分＝4cc）
+    // 冰量（台灣手搖店的五種）：用冰鏟鏟冰，看杯子裡幾顆
+    // 去冰＝先加冰、倒茶冰鎮，再用冰鏟把冰刮掉；完全去冰＝從頭到尾不加冰
     ice: [
-      { id: 'none', name: '去冰', min: 0, max: 0 },
-      { id: 'less', name: '少冰', min: 1, max: 2 },
-      { id: 'normal', name: '正常冰', min: 3, max: 5 },
+      // 一顆冰約 25g；一鏟 8 顆約 200g
+      { id: 'normal', name: '正常冰', min: 7, max: 8, recipe: '冰約 200g（一鏟，7–8 顆）' },
+      { id: 'less', name: '少冰', min: 5, max: 6, recipe: '冰約七成（5–6 顆）' },
+      { id: 'light', name: '微冰', min: 2, max: 3, recipe: '冰約三成（2–3 顆）' },
+      { id: 'none', name: '去冰', min: 0, max: 0, chilled: true, recipe: '加冰冰鎮後刮掉' },
+      { id: 'zero', name: '完全去冰', min: 0, max: 0, chilled: false, recipe: '完全不加冰' },
     ],
-    // 加料：一份的顆數範圍
+    // 加料：一勺約 60g（12 顆）
     toppings: [
-      { id: 'pearl', name: '珍珠', min: 6, max: 22, color: '#3b2114', shape: 'ball' },
-      { id: 'coco', name: '椰果', min: 6, max: 22, color: '#f4efe0', shape: 'cube' },
-      { id: 'grass', name: '仙草', min: 6, max: 22, color: '#1d1410', shape: 'cube' },
+      { id: 'pearl', name: '珍珠', min: 8, max: 16, color: '#3b2114', shape: 'ball' },
+      { id: 'coco', name: '椰果', min: 8, max: 16, color: '#f4efe0', shape: 'cube' },
+      { id: 'grass', name: '仙草', min: 8, max: 16, color: '#1d1410', shape: 'cube' },
     ],
     fillMin: 0.75,         // 至少要裝到 75%
   },
 
   pour: {
     teaRate: 0.2,          // 茶桶每秒倒出「一杯的 20%」
-    syrupRate: 4,          // 果糖每秒 +4 甜度
-    syrupVolume: 0.006,    // 每 1 甜度佔杯子多少容量（全糖＝6%）
-    scoopPerMeter: 140,    // 勺子在料槽裡移動 1 公尺舀起幾顆
-    scoopMax: 14,          // 一勺最多幾顆
-    scoopPourRate: 26,     // 倒料速度（顆／秒）
+    syrupRate: 16,         // 果糖機按住每秒出 16cc（全糖 40cc 約 2.5 秒）
+    syrupVolume: 0.0014,   // 1cc 果糖佔大杯 700cc 的比例
+    scoopMax: 12,          // 一勺＝12 顆（約 60g）：勺子伸進料槽就是滿滿一勺
+    iceMax: 8,             // 一鏟＝8 顆（約 200g）：冰鏟插進冰桶就是滿滿一鏟
+    iceDripRate: 2.5,      // 冰鏟在杯口上方：每秒掉幾顆冰進去（移開就停）
+    chillSeconds: 1.0,     // 冰塊泡在茶裡幾秒算冰鎮過
     shakesToMix: 10,       // 搖幾下算搖勻
   },
 

@@ -15,6 +15,9 @@ export const GROUPS = {
   normal: (0x0002 << 16) | 0xffff,
   heldSlow: (0x0004 << 16) | 0x0001, // 拿在手上的杯子：只碰固定的東西
   tool: (0x0008 << 16) | 0x0001,     // 勺子：只碰台面、地板，永遠不推杯子
+  static: (0x0001 << 16) | 0xffff,   // 一般固定的東西（台面、牆、地板、柱子）：不擋拿在手上的杯子
+  machine: (0x0011 << 16) | 0xffff,  // 機台（茶桶、茶桶架、果糖機、封膜機）：也算固定的東西
+  machineQuery: (0xffff << 16) | 0x0010, // 拿在手上的杯子只查機台
 };
 
 export class Physics {
@@ -25,15 +28,19 @@ export class Physics {
     this.alpha = 0;
   }
 
-  fixedBox(cx, cy, cz, hx, hy, hz, { friction = 0.7, restitution = 0.15 } = {}) {
+  fixedBox(cx, cy, cz, hx, hy, hz, { friction = 0.7, restitution = 0.15, groups } = {}) {
     const b = this.world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(cx, cy, cz));
-    this.world.createCollider(R.ColliderDesc.cuboid(hx, hy, hz).setFriction(friction).setRestitution(restitution), b);
+    const d = R.ColliderDesc.cuboid(hx, hy, hz).setFriction(friction).setRestitution(restitution);
+    d.setCollisionGroups(groups ?? GROUPS.static);
+    this.world.createCollider(d, b);
     return b;
   }
 
-  fixedCylinder(cx, cy, cz, halfH, r) {
+  fixedCylinder(cx, cy, cz, halfH, r, { groups } = {}) {
     const b = this.world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(cx, cy, cz));
-    this.world.createCollider(R.ColliderDesc.cylinder(halfH, r).setFriction(0.6), b);
+    const d = R.ColliderDesc.cylinder(halfH, r).setFriction(0.6);
+    d.setCollisionGroups(groups ?? GROUPS.static);
+    this.world.createCollider(d, b);
     return b;
   }
 

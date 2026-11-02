@@ -26,24 +26,25 @@ export function orderName(o) {
 
 // 點單小白單上的四行（刁難客的那一行改成紅字）
 export function ticketRows(o, rule) {
+  // 第 4 欄是配方（照單做要放多少）
   const rows = [
-    ['茶', teaById(o.tea).name],
-    ['甜度', sweetName(o.sweet)],
-    ['冰塊', iceById(o.ice).name],
-    ['加料', o.top ? topById(o.top).name : '不加'],
+    ['茶', teaById(o.tea).name, false, '倒到八分滿'],
+    ['甜度', sweetName(o.sweet), false, o.sweet ? `果糖 ${o.sweet}cc` : '不加果糖'],
+    ['冰塊', iceById(o.ice).name, false, iceById(o.ice).recipe],
+    ['加料', o.top ? topById(o.top).name : '不加', false, o.top ? '一勺（約 60g）' : ''],
   ];
-  if (rule?.iceExact != null) rows[2] = ['冰塊', `剛好 ${rule.iceExact} 顆`, true];
-  if (rule?.toppingExact) { const [k, n] = Object.entries(rule.toppingExact)[0]; rows[3] = ['加料', `${topById(k).name}剛好 ${n} 顆`, true]; }
-  if (rule?.sweetExact != null) rows[1] = ['甜度', `剛好 ${rule.sweetExact.toFixed(1)}`, true];
+  if (rule?.iceExact != null) rows[2] = ['冰塊', `剛好 ${rule.iceExact} 顆`, true, `冰 ${rule.iceExact} 顆`];
+  if (rule?.toppingExact) { const [k, n] = Object.entries(rule.toppingExact)[0]; rows[3] = ['加料', `${topById(k).name}剛好 ${n} 顆`, true, `${n} 顆`]; }
+  if (rule?.sweetExact != null) rows[1] = ['甜度', `剛好 ${rule.sweetExact.toFixed(1)} 分`, true, `果糖 ${(rule.sweetExact * 4).toFixed(1)}cc`];
   return rows;
 }
 
 // 刁難客：把規則套進訂單，讓一般欄位不衝突
 export function applyRule(o, rule) {
   const r = { ...o };
-  if (rule.iceExact != null) r.ice = rule.iceExact === 0 ? 'none' : rule.iceExact <= 2 ? 'less' : 'normal';
+  if (rule.iceExact != null) r.ice = rule.iceExact === 0 ? 'zero' : rule.iceExact <= 3 ? 'light' : rule.iceExact <= 5 ? 'less' : 'normal';
   if (rule.toppingExact) r.top = Object.keys(rule.toppingExact)[0];
-  if (rule.sweetExact != null) r.sweet = rule.sweetExact;
+  if (rule.sweetExact != null) r.sweet = rule.sweetExact * 4; // 甜度幾分 → 果糖 cc（1 分＝4cc）
   return r;
 }
 
@@ -61,7 +62,7 @@ export function judge(cup, o, rule) {
   }
   // 甜度
   if (rule?.sweetExact != null) {
-    if (Math.abs(cup.sugar - rule.sweetExact) > M.sweetExactTolerance) errs.push(`甜度 ${cup.sugar.toFixed(1)}，不是 ${rule.sweetExact.toFixed(1)}`);
+    if (Math.abs(cup.sugar - rule.sweetExact * 4) > M.sweetExactTolerance) errs.push(`甜度 ${(cup.sugar / 4).toFixed(1)} 分，不是 ${rule.sweetExact.toFixed(1)} 分`);
   } else if (Math.abs(cup.sugar - o.sweet) > M.sweetTolerance) errs.push(cup.sugar > o.sweet ? '太甜' : '不夠甜');
   // 冰塊
   if (rule?.iceExact != null) {
@@ -69,7 +70,9 @@ export function judge(cup, o, rule) {
   } else {
     const ice = iceById(o.ice);
     if (cup.ice < ice.min) errs.push('冰塊太少');
-    else if (cup.ice > ice.max) errs.push('冰塊太多');
+    else if (cup.ice > ice.max) errs.push(ice.max === 0 ? '冰沒刮乾淨' : '冰塊太多');
+    if (ice.chilled === true && !cup.chilled) errs.push('去冰沒冰鎮');
+    if (ice.chilled === false && cup.chilled) errs.push('完全去冰碰到冰了');
   }
   // 加料
   const tops = cup.tops;
