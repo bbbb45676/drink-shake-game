@@ -33,9 +33,12 @@ export function buildShop(scene, phys, M, proxies) {
   const B = new Builder();
   const Y = L.counterY;
   const c = L.counter;
-  const holeX0 = 0.345, holeX1 = 0.855;
-  const well = { z0: L.wellZ - L.wellD / 2, z1: L.wellZ + L.wellD / 2 };
-  const ice = { z0: L.iceBin.z - L.iceBin.d / 2, z1: L.iceBin.z + L.iceBin.d / 2 };
+  const wX0 = L.wellX0, wX1 = L.wellX1; // 料槽的洞
+  const ib = L.iceBin;
+  const holes = [
+    { x0: wX0, x1: wX1, z0: L.wellZ - L.wellD / 2, z1: L.wellZ + L.wellD / 2 },
+    { x0: ib.x - ib.w / 2, x1: ib.x + ib.w / 2, z0: ib.z - ib.d / 2, z1: ib.z + ib.d / 2 },
+  ];
 
   // ---- 櫃台台面（不鏽鋼），挖出料槽與冰桶的洞 ----
   const top = (x0, x1, z0, z1) => {
@@ -48,14 +51,22 @@ export function buildShop(scene, phys, M, proxies) {
     pm.position.set((x0 + x1) / 2, Y - 0.01, (z0 + pz1) / 2); pm.userData = { kind: 'surface' }; pm.updateMatrixWorld(true);
     proxies.push(pm);
   };
-  top(c.x0, holeX0, c.z0, c.z1);
-  top(holeX1, c.x1, c.z0, c.z1);
-  top(holeX0, holeX1, c.z0, ice.z0);
-  top(holeX0, holeX1, ice.z1, well.z0);
-  top(holeX0, holeX1, well.z1, c.z1);
+  // 依洞的邊切成格子，同一列相鄰的實心格子合併成一塊
+  const xs = [...new Set([c.x0, c.x1, ...holes.flatMap((h) => [h.x0, h.x1])])].sort((p, q) => p - q);
+  const zs = [...new Set([c.z0, c.z1, ...holes.flatMap((h) => [h.z0, h.z1])])].sort((p, q) => p - q);
+  const inHole = (x, z) => holes.some((h) => x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1);
+  for (let j = 0; j < zs.length - 1; j++) {
+    const zm = (zs[j] + zs[j + 1]) / 2;
+    let start = null;
+    for (let i = 0; i < xs.length - 1; i++) {
+      const solid = !inHole((xs[i] + xs[i + 1]) / 2, zm);
+      if (solid && start == null) start = xs[i];
+      if (!solid && start != null) { top(start, xs[i], zs[j], zs[j + 1]); start = null; }
+    }
+    if (start != null) top(start, xs[xs.length - 1], zs[j], zs[j + 1]);
+  }
   // 洞的底（掉進去的東西有地方放）
-  phys.fixedBox(0.6, Y - 0.16, (well.z0 + well.z1) / 2, 0.26, 0.04, (well.z1 - well.z0) / 2);
-  phys.fixedBox(0.6, Y - 0.16, L.iceBin.z, 0.26, 0.04, L.iceBin.d / 2);
+  for (const h of holes) phys.fixedBox((h.x0 + h.x1) / 2, Y - 0.16, (h.z0 + h.z1) / 2, (h.x1 - h.x0) / 2, 0.04, (h.z1 - h.z0) / 2);
   // 前緣圓角收邊
   B.add(new THREE.CylinderGeometry(0.015, 0.015, c.x1 - c.x0, 12), M.steel, { pos: [0, Y - 0.015, c.z1], rot: [0, 0, Math.PI / 2], cast: false });
   // 櫃體

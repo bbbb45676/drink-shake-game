@@ -26,7 +26,7 @@
 
   <div id="ui">
     <header id="hud" hidden>
-      <div class="chip chip-time"><span>下班</span><b id="hud-time">3:00</b></div>
+      <div class="chip chip-time"><span>下班</span><b id="hud-time">5:00</b></div>
       <div class="chip chip-score"><span>分數</span><b id="hud-score">0</b></div>
       <button id="btn-sound" class="icon-btn" aria-label="開啟音效"></button>
     </header>
@@ -38,6 +38,7 @@
     <div id="hint" hidden></div>
     <div id="popups"></div>
     <div id="stamp" hidden></div>
+    <div id="reviews" aria-live="polite"></div>
 
     <!-- 開始畫面 -->
     <section id="screen-start" class="screen" hidden>
@@ -45,7 +46,7 @@
         <p class="start-shop"><span class="logo">晃</span>晃晃茶舖・打工第一天</p>
         <h1>手搖飲<br>搖搖樂</h1>
         <p class="start-sub">奧客退散！</p>
-        <p class="start-lead">你站在吧台後面，只有兩隻手。<br>開茶桶、舀珍珠、封膜、搖勻，交給客人。<br>遇到奧客？把飲料砸過去。</p>
+        <p class="start-lead">你站在吧台後面，只有兩隻手。<br>雪克杯裝茶、蓋上蓋子給搖茶機搖、倒進杯子、封膜，<br>收錢找錢，交給客人。客人走了會留評論。<br>遇到奧客？把雪克杯砸過去。</p>
         <div id="ctl-desktop" class="controls">
           <div><kbd>左鍵</kbd>左手</div><div><kbd>右鍵</kbd>右手</div>
           <p>按住＝抓住，放開＝放手（杯子會掉）。<br>滑鼠移動的是「最後按下的那隻手」。觸控板可以用 <kbd>Z</kbd> <kbd>X</kbd> 代替左右鍵。</p>
@@ -63,19 +64,27 @@
             <tr><td>微冰</td><td class="p">約三成（2–3 顆）</td></tr>
             <tr><td>去冰</td><td class="p">加冰、倒茶冰鎮，再用空冰鏟刮掉</td></tr>
             <tr><td>完全去冰</td><td class="p">完全不加冰</td></tr>
-            <tr><td>茶</td><td class="p">加到杯身 8 分線（冰越少茶越多）</td></tr>
-            <tr><td>加料</td><td class="p">一勺約 60g（12 顆）</td></tr>
-            <tr><td>出杯</td><td class="p">封膜 → 搖 10 下 → 交給客人</td></tr>
+            <tr><td>茶（倒進雪克杯）</td><td class="p">正常冰 300cc・少冰 350cc・微冰 420cc・去冰／完全去冰 490cc（雪克杯上會顯示 cc）</td></tr>
+            <tr><td>雪克杯</td><td class="p">茶＋果糖＋冰 → <b>蓋上蓋子</b> → 放上搖茶機搖勻（搖完<b>自動打開蓋子</b>）</td></tr>
+            <tr><td>加料</td><td class="p">料放進杯子（雪克杯不能加料）：一勺約 60g（12 顆）</td></tr>
+            <tr><td>倒</td><td class="p">雪克杯靠近杯子就會倒，全部倒進去</td></tr>
+            <tr><td>出杯</td><td class="p">封膜 → 交給客人</td></tr>
+            <tr><td>收銀</td><td class="p">找零盤上的錢放進收銀機，按一下抽屜的零錢＝剛好要找的錢，放到找零盤</td></tr>
+            <tr><td>困難版</td><td class="p">真實配方：奶精、鮮奶分開，果汁、黑糖、布丁；看小白單</td></tr>
           </table>
         </details>
         <details class="rules">
           <summary>計分規則</summary>
           <table>
             <tr><td>出餐全對</td><td class="p">+100</td></tr>
-            <tr><td>快：20 秒內／35 秒內交到</td><td class="p">+50／+25</td></tr>
+            <tr><td>快：45 秒內／75 秒內交到</td><td class="p">+50／+25</td></tr>
             <tr><td>刁難客的要求做到</td><td class="p">+100</td></tr>
             <tr><td>砸中奧客</td><td class="p">+150</td></tr>
-            <tr><td>每錯一項（茶、甜度、冰、料、太少、沒搖勻）</td><td class="m">−25</td></tr>
+            <tr><td>找錢找對</td><td class="p">+20</td></tr>
+            <tr><td>做錯客人將就收下：每錯一項（茶、茶量、甜度、冰、料、沒搖勻）</td><td class="m">−25</td></tr>
+            <tr><td>做錯被退回重做（再錯一次客人可能直接走）</td><td class="m">−15</td></tr>
+            <tr><td>少找錢</td><td class="m">−40</td></tr>
+            <tr><td>客人等不到找錢就走</td><td class="m">−50</td></tr>
             <tr><td>沒封膜就交出去</td><td class="m">−40</td></tr>
             <tr><td>乖乖做給奧客</td><td class="m">−50</td></tr>
             <tr><td>客人等太久走掉</td><td class="m">−50</td></tr>
@@ -86,6 +95,7 @@
         </details>
         <label class="snd"><input type="checkbox" id="chk-sound" checked> 開音效</label>
         <button id="btn-start" class="btn btn-primary btn-big">開始上班</button>
+        <button id="btn-hard" class="btn btn-ghost btn-hard" disabled>困難版</button>
       </div>
     </section>
 
@@ -93,9 +103,12 @@
     <section id="screen-result" class="screen" hidden>
       <div class="result-wrap">
         <img id="result-img" alt="下班結算卡">
+        <div id="result-unlock" class="unlock" hidden>困難版解鎖了！真實配方：奶精和鮮奶分開、果汁、黑糖、布丁</div>
         <div id="result-money"></div>
+        <div id="result-reviews"></div>
         <div class="actions">
           <button id="btn-download" class="btn btn-ghost">下載圖片</button>
+          <button id="btn-hard2" class="btn btn-ghost" hidden>困難版</button>
           <button id="btn-again" class="btn btn-primary">再上一班</button>
         </div>
       </div>

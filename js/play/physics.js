@@ -26,13 +26,15 @@ export class Physics {
     this.world.timestep = STEP;
     this.acc = 0;
     this.alpha = 0;
+    this.noSpill = new Set(); // 撞到也不會灑的機台碰撞體（封膜機）
   }
 
-  fixedBox(cx, cy, cz, hx, hy, hz, { friction = 0.7, restitution = 0.15, groups } = {}) {
+  fixedBox(cx, cy, cz, hx, hy, hz, { friction = 0.7, restitution = 0.15, groups, noSpill = false } = {}) {
     const b = this.world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(cx, cy, cz));
     const d = R.ColliderDesc.cuboid(hx, hy, hz).setFriction(friction).setRestitution(restitution);
     d.setCollisionGroups(groups ?? GROUPS.static);
-    this.world.createCollider(d, b);
+    const col = this.world.createCollider(d, b);
+    if (noSpill) this.noSpill.add(col.handle);
     return b;
   }
 

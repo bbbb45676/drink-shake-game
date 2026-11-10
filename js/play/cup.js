@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { R, GROUPS } from './physics.js';
-import { CUP, CONFIG } from '../config.js';
-import { cupPrintTex, filmTex } from '../gfx/textures.js';
+import { CUP, CONFIG, L } from '../config.js';
+import { cupPrintTex, filmTex, shakerPrintTex } from '../gfx/textures.js';
 
 const H = CUP.h;
-const teaById = (id) => CONFIG.menu.teas.find((t) => t.id === id);
+const LIQ = CONFIG.liquids;
+const teaById = (id) => LIQ[id];
 const TOPS = CONFIG.menu.toppings;
 
 // 共用幾何與材質
@@ -41,7 +42,10 @@ export function cupShared() {
   const topMat = new THREE.MeshPhysicalMaterial({ roughness: 0.2, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.1 });
   const iceMat = new THREE.MeshPhysicalMaterial({ color: '#f2fbff', roughness: 0.04, transparent: true, opacity: 0.7, clearcoat: 1, depthWrite: false });
   const pickGeo = new THREE.CylinderGeometry(CUP.rTop + 0.02, CUP.rTop + 0.02, H + 0.03, 8);
-  shared = { shellGeo, shellMat, printGeo, printMat, liquidGeo, filmGeo, filmMat, pearlGeo, cubeGeo, iceGeo, topMat, iceMat, pickGeo };
+  // 雪克杯：不鏽鋼（看不到裡面，標籤會顯示幾 cc）
+  const shakerShellMat = new THREE.MeshStandardMaterial({ color: '#d3d8dc', metalness: 0.92, roughness: 0.26, envMapIntensity: 1.1, side: THREE.DoubleSide });
+  const shakerPrintMat = new THREE.MeshStandardMaterial({ color: '#9aa1a7', metalness: 0.9, roughness: 0.4 });
+  shared = { shellGeo, shellMat, printGeo, printMat, liquidGeo, filmGeo, filmMat, pearlGeo, cubeGeo, iceGeo, topMat, iceMat, pickGeo, shakerShellMat, shakerPrintMat };
   return shared;
 }
 
@@ -59,24 +63,33 @@ function liquidMaterial() {
   return m;
 }
 // 每種茶的「深淺」：光走多遠會被染滿（越小越深）
-const ATTEN = { black: 0.06, green: 0.16, milk: 0.02 };
+const ATTEN = { black: 0.06, green: 0.16, milk: 0.02, oolong: 0.08, freshMilk: 0.01, creamer: 0.01, brown: 0.02, passion: 0.12, lemon: 0.25, grapefruit: 0.1, orange: 0.08 };
+const MILKY = { milk: 1, freshMilk: 1, creamer: 2.5 }; // 奶精、鮮奶會讓茶變不透明
 const capGeo = new THREE.CircleGeometry(1, 36).rotateX(-Math.PI / 2);
 const FOAM = new THREE.Color('#f1dfc0');
 
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _up = new THREE.Vector3(0, 1, 0), _s = new THREE.Vector3(1, 1, 1);
 
 let nextId = 1;
+// 雪克杯：跟杯子同一套（裝茶、果糖、冰），只是比較高、比較寬，可以裝約 1000cc
+export const SHAKER = { sy: 1.35, sxz: 1.12, cap: 1.45 };
+
 export class Cup {
-  constructor(scene, phys, pos, owners) {
+  constructor(scene, phys, pos, owners, opts = {}) {
     const S = cupShared();
     this.id = nextId++;
+    this.isShaker = !!opts.shaker;
+    this.sy = this.isShaker ? SHAKER.sy : 1; this.sxz = this.isShaker ? SHAKER.sxz : 1;
+    this.capacity = this.isShaker ? SHAKER.cap : 1;      // 裝得下多少（以「一杯 700cc」為 1）
+    this.H = H * this.sy; this.R = CUP.rTop * this.sxz; this.Rb = CUP.rBot * this.sxz;
+    this.home = opts.home ? opts.home.clone() : null;
     this.scene = scene; this.phys = phys; this.owners = owners;
     this.group = new THREE.Group();
     // 內容
-    this.tea = { black: 0, green: 0, milk: 0 };
+    this.tea = Object.fromEntries(Object.keys(LIQ).map((k) => [k, 0])); // 各種液體的量（一杯 700cc＝1）
     this.sugar = 0;
     this.ice = 0;
-    this.tops = { pearl: 0, coco: 0, grass: 0 };
+    this.tops = Object.fromEntries(TOPS.map((t) => [t.id, 0])); // 珍珠、椰果、仙草、布丁
     this.sealed = false; this.shakes = 0; this.mix = 0;
     this.chilled = false; this.chillT = 0; // 冰塊泡在茶裡一段時間＝冰鎮過（去冰要先冰鎮）
     this.held = null; this.locked = false; this.alive = true; this.dropped = false;
@@ -93,12 +106,13 @@ export class Cup {
     this.cap.renderOrder = 2; this.cap.visible = false;
     scene.add(this.cap);
     this.foam = 0;
-    this.shell = new THREE.Mesh(S.shellGeo, S.shellMat);
-    this.shell.renderOrder = 3; this.shell.castShadow = true;
+    this.shell = new THREE.Mesh(S.shellGeo, this.isShaker ? S.shakerShellMat : S.shellMat);
+    this.shell.renderOrder = this.isShaker ? 0 : 3; this.shell.castShadow = true;
     this.group.add(this.shell);
     this.print = new THREE.Mesh(S.printGeo, S.printMat);
     this.print.renderOrder = 4; this.print.castShadow = false;
-    this.group.add(this.print);
+    if (!this.isShaker) this.group.add(this.print);
+    this.lid = null; // 雪克杯蓋（蓋著才能搖、不會灑；要打開才能倒）
     this.film = new THREE.Mesh(S.filmGeo, S.filmMat);
     this.film.position.y = H + 0.0005; this.film.visible = false; this.film.renderOrder = 5;
     this.group.add(this.film);
@@ -116,12 +130,20 @@ export class Cup {
     this.shadow = new THREE.Mesh(new THREE.CylinderGeometry(CUP.rTop * 0.9, CUP.rBot * 0.9, H * 0.9, 12), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
     this.shadow.position.y = H / 2; this.shadow.castShadow = true;
     this.group.add(this.shadow);
+    if (this.isShaker) {
+      // 不鏽鋼雪克杯：杯口捲邊、杯身兩道壓線
+      for (const [y, h, r] of [[H - 0.004, 0.008, CUP.rTop + 0.0028], [H * 0.62, 0.004, CUP.rBot + (CUP.rTop - CUP.rBot) * 0.62 + 0.0012], [H * 0.2, 0.004, CUP.rBot + (CUP.rTop - CUP.rBot) * 0.2 + 0.0012]]) {
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 32, 1, true), S.shakerPrintMat);
+        band.position.y = y; this.group.add(band);
+      }
+    }
+    this.group.scale.set(this.sxz, this.sy, this.sxz);
     scene.add(this.group);
     this.topSeed = Math.random() * 1000;
     this.layout = [];
 
     const body = phys.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setCcdEnabled(true).setLinearDamping(0.1).setAngularDamping(1.2));
-    const col = phys.world.createCollider(R.ColliderDesc.cylinder(H / 2, (CUP.rTop + CUP.rBot) / 2).setDensity(100).setFriction(1.0).setRestitution(0.02), body);
+    const col = phys.world.createCollider(R.ColliderDesc.cylinder(this.H / 2, (this.R + this.Rb) / 2).setDensity(100).setFriction(1.0).setRestitution(0.02), body);
     col.setCollisionGroups(GROUPS.normal);
     this.body = body; this.collider = col;
     this.massKey = -1;
@@ -136,10 +158,13 @@ export class Cup {
     this.dirty = true;
   }
 
-  get fill() { return this.tea.black + this.tea.green + this.tea.milk + this.sugar * CONFIG.pour.syrupVolume; }
-  get topCount() { return this.tops.pearl + this.tops.coco + this.tops.grass; }
+  get liquidVol() { let v = 0; for (const k in this.tea) v += this.tea[k]; return v; }
+  get fill() { return this.liquidVol + this.sugar * CONFIG.pour.syrupVolume; }
+  cc(id) { return this.tea[id] * 700; }
+  get topCount() { let n = 0; for (const k in this.tops) n += this.tops[k]; return n; }
   get level() { return this.fill + this.topCount * 0.006 + this.ice * 0.035; }
   get empty() { return this.fill < 0.01 && this.topCount === 0 && this.ice === 0; }
+  get frac() { return this.level / this.capacity; } // 裝了幾成（雪克杯以自己的容量算）
 
   // 主要的茶（看哪一種最多）
   mainTea() {
@@ -150,7 +175,7 @@ export class Cup {
 
   addLiquid(teaId, amount) {
     if (this.sealed) return amount;
-    const room = Math.max(0, 1.0 - this.level);
+    const room = Math.max(0, this.capacity - this.level);
     const a = Math.min(amount, room + 0.0);
     this.tea[teaId] += a;
     this.dirty = true;
@@ -158,7 +183,7 @@ export class Cup {
   }
   addSugar(units) {
     if (this.sealed) return units;
-    const room = Math.max(0, 1.0 - this.level) / CONFIG.pour.syrupVolume;
+    const room = Math.max(0, this.capacity - this.level) / CONFIG.pour.syrupVolume;
     const a = Math.min(units, room);
     this.sugar += a; this.dirty = true;
     return units - a;
@@ -191,13 +216,14 @@ export class Cup {
 
   // 重量：空杯很輕；裝了飲料、料、冰塊就變重，而且重心在下面（不容易倒）
   updateMass() {
-    const m = 0.03 + this.fill * 0.6 + this.topCount * 0.002 + this.ice * 0.008;
+    const H = this.H;
+    const m = (this.isShaker ? 0.09 : 0.03) + this.fill * 0.6 + this.topCount * 0.002 + this.ice * 0.008;
     const key = Math.round(m * 200);
     if (key === this.massKey) return;
     this.massKey = key;
-    const lv = Math.min(1, this.level);
+    const lv = Math.min(1, this.frac);
     const cy = -H / 2 + H * (0.18 + 0.25 * lv) * (this.fill > 0.05 ? 1 : 2); // 液體越少重心越低
-    const r = (CUP.rTop + CUP.rBot) / 2;
+    const r = (this.R + this.Rb) / 2;
     const ixx = m * (3 * r * r + H * H) / 12, iyy = m * r * r / 2;
     if (typeof this.collider.setMassProperties === 'function') {
       this.collider.setMassProperties(m, { x: 0, y: Math.min(0, cy), z: 0 }, { x: ixx, y: iyy, z: ixx }, { x: 0, y: 0, z: 0, w: 1 });
@@ -253,30 +279,38 @@ export class Cup {
     this.vel.set(v.x, v.y, v.z);
     this.speed = this.vel.length();
     // 視覺：群組原點在杯底
-    _v.set(0, -H / 2, 0).applyQuaternion(this.quat).add(this.pos);
+    _v.set(0, -this.H / 2, 0).applyQuaternion(this.quat).add(this.pos);
     this.group.position.copy(_v);
     this.group.quaternion.copy(this.quat);
   }
 
-  bottomCenter(out) { return out.set(0, -H / 2, 0).applyQuaternion(this.quat).add(this.pos); }
-  rimCenter(out) { return out.set(0, H / 2, 0).applyQuaternion(this.quat).add(this.pos); }
+  bottomCenter(out) { return out.set(0, -this.H / 2, 0).applyQuaternion(this.quat).add(this.pos); }
+  rimCenter(out) { return out.set(0, this.H / 2, 0).applyQuaternion(this.quat).add(this.pos); }
+
+  // 全部倒掉（沖杯、雪克杯回到原位）
+  empty_() {
+    for (const k in this.tea) this.tea[k] = 0;
+    this.sugar = 0; this.ice = 0; for (const k in this.tops) this.tops[k] = 0;
+    this.mix = 0; this.shakes = 0; this.chilled = false; this.chillT = 0; this.iceCarry = 0;
+    this.dirty = true;
+  }
 
   // 每幀更新液面與裡面的料
   updateVisual(dt) {
-    const lvl = Math.min(1, this.level);
     const liquidOn = this.fill > 0.004;
-    this.liquid.visible = liquidOn;
-    this.cap.visible = liquidOn && this.up.y > 0.75;
+    this.liquid.visible = liquidOn && !this.isShaker;
+    this.cap.visible = liquidOn && this.up.y > 0.75 && !this.lid;
     if (liquidOn) {
-      const lv = Math.min(1, this.fill + this.topCount * 0.006 + this.ice * 0.035);
-      const surfaceLocal = lv * (H - 0.004) + 0.003;
+      const lv = Math.min(1, this.frac);
+      const surfaceLocal = (lv * (H - 0.004) + 0.003) * this.sy;
       const p = _v.set(0, surfaceLocal, 0).applyQuaternion(this.quat).add(this.group.position);
       const plane = this.liquidMat.clippingPlanes[0];
       plane.normal.set(0, -1, 0); plane.constant = p.y;
       this.foam += ((this.sealed ? Math.min(0.85, this.mix) : 0) - this.foam) * Math.min(1, dt * 3);
       if (this.dirty || this.foam > 0.001) {
         const c = this.color();
-        const milky = this.tea.milk / Math.max(0.001, this.fill);
+        let mk = 0; for (const k in MILKY) mk += (this.tea[k] || 0) * MILKY[k];
+        const milky = Math.min(1, mk / Math.max(0.001, this.fill));
         if (LIQUID.transmission) {
           let at = 0, sum = 0;
           for (const k in this.tea) { at += ATTEN[k] * this.tea[k]; sum += this.tea[k]; }
@@ -294,7 +328,7 @@ export class Cup {
           this.capMat.color.copy(c).lerp(FOAM, this.foam);
         }
       }
-      const r = (CUP.rBot + (CUP.rTop - CUP.rBot) * lv) - 0.0028;
+      const r = ((CUP.rBot + (CUP.rTop - CUP.rBot) * lv) - 0.0028) * this.sxz;
       this.cap.position.copy(p);
       this.cap.scale.set(r, 1, r);
     }
@@ -332,7 +366,7 @@ export class Cup {
     if (this.cubes.instanceColor) this.cubes.instanceColor.needsUpdate = true;
     // 冰塊浮在液面附近
     const n = Math.min(8, this.ice);
-    const top = this.fill > 0.05 ? Math.min(1, this.level) * H - 0.014 : 0.014 + (this.topCount / 9) * 0.0125;
+    const top = this.fill > 0.05 ? Math.min(1, this.frac) * H - 0.014 / this.sy : 0.014 + (this.topCount / 9) * 0.0125;
     for (let k = 0; k < n; k++) {
       const a = k * 2.1 + 0.4, r = k === 0 && n === 1 ? 0.004 : 0.016 + (k % 2) * 0.006;
       _q.setFromEuler(new THREE.Euler(0.3 * k, k, 0.2));
@@ -354,3 +388,65 @@ export class Cup {
     this.shadow.geometry.dispose();
   }
 }
+
+// ---------------- 雪克杯蓋 ----------------
+// 平常放在雪克杯前面。拿起來放到雪克杯口上＝蓋上；按住蓋子拿起來＝打開。放開沒蓋到就回原位
+export class ShakerLid {
+  constructor(scene, home) {
+    const S = cupShared();
+    this.home = new THREE.Vector3(home.x, L.counterY + 0.012, home.z);
+    this.group = new THREE.Group();
+    const R = CUP.rTop * SHAKER.sxz + 0.0045;
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.026, 32, 1, true), S.shakerShellMat);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.9, R, 0.008, 32), S.shakerShellMat);
+    top.position.y = 0.017;
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(R * 0.9, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2), S.shakerShellMat);
+    dome.scale.y = 0.35; dome.position.y = 0.021;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(R, 0.0025, 8, 32), S.shakerPrintMat);
+    ring.rotation.x = Math.PI / 2; ring.position.y = -0.013;
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.013, 0.012, 16), new THREE.MeshStandardMaterial({ color: '#2b2f33', roughness: 0.5 }));
+    knob.position.y = 0.043;
+    for (const m of [skirt, top, dome, knob]) { m.castShadow = true; this.group.add(m); }
+    this.group.add(ring);
+    this.pick = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6)); this.pick.visible = false; this.pick.position.y = 0.02;
+    this.pick.userData = { kind: 'lid', lid: this };
+    this.group.add(this.pick);
+    scene.add(this.group);
+    this.on = null; this.held = null;
+    this.toRest();
+  }
+  toRest() {
+    if (this.on) this.on.lid = null;
+    this.on = null; this.held = null; this.fly = null;
+    this.group.position.copy(this.home); this.group.quaternion.identity();
+  }
+  // 搖完自動打開：從現在的位置飛回原位
+  flyHome() {
+    this.detach(); this.held = null;
+    this.fly = { from: this.group.position.clone(), t: 0 };
+  }
+  attach(shaker) { this.held = null; this.fly = null; this.on = shaker; shaker.lid = this; shaker.dirty = true; }
+  detach() { if (this.on) { this.on.lid = null; this.on.dirty = true; } this.on = null; }
+  // 蓋子的位置：蓋著＝跟著雪克杯；拿著＝跟著手
+  update(dt = 1 / 60) {
+    if (this.fly) {
+      if (this.held) this.fly = null;
+      else {
+        const f = this.fly; f.t = Math.min(1, f.t + dt / 0.6);
+        const k = f.t * f.t * (3 - 2 * f.t);
+        this.group.position.lerpVectors(f.from, this.home, k);
+        this.group.position.y += Math.sin(Math.PI * f.t) * 0.16;
+        this.group.rotation.set(0, 0, Math.sin(Math.PI * f.t) * 0.5);
+        if (f.t >= 1) this.toRest();
+        return;
+      }
+    }
+    if (this.on) {
+      if (!this.on.alive) { this.toRest(); return; }
+      this.on.rimCenter(this.group.position);
+      this.group.quaternion.copy(this.on.quat);
+    }
+  }
+  moveTo(p) { this.group.position.copy(p); this.group.quaternion.identity(); }
+}
+

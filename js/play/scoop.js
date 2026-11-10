@@ -45,7 +45,7 @@ function scoopShared(M) {
 
 export class Scoop {
   constructor(scene, phys, M, well, owners) {
-    const S = scoopShared(M);
+    const S = scoopShared(M); this.S = S;
     this.well = well; this.phys = phys; this.owners = owners;
     this.isIce = !!well.ice;
     this.max = this.isIce ? CONFIG.pour.iceMax : CONFIG.pour.scoopMax;
@@ -157,9 +157,18 @@ export class Scoop {
 
   setLoad(n, type) {
     this.load = Math.max(0, Math.min(this.max, n));
-    if (type) this.loadType = type;
+    let changed = false;
+    if (type && type !== this.loadType) {
+      // 勺子舀到別的料：勺子裡畫出來的料也要換（顏色、形狀）
+      this.loadType = type; changed = true;
+      const info = TOPS[type];
+      if (info && !this.isIce) {
+        this.loadMat.color.set(info.color);
+        this.loadMesh.geometry = info.shape === 'ball' ? this.S.ball : this.S.cube;
+      }
+    }
     const want = Math.round(this.load);
-    if (want === this.loadMesh.count) return;
+    if (want === this.loadMesh.count && !changed) return;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion();
     for (let i = 0; i < want; i++) {
       if (this.isIce) {

@@ -48,6 +48,7 @@ body.playing #gl { cursor: none; }
 #ticket .t-row.hot b { color: var(--red); }
 #ticket .t-rec { text-align: right; font-size: 11px; color: var(--teal); margin: -3px 0 2px; }
 #ticket .t-special { margin-top: 4px; color: var(--red); font-size: 15px; }
+#ticket .t-pay { margin-top: 6px; padding-top: 5px; border-top: 1px dashed rgba(62,38,24,.3); color: var(--teal, #2C7A73); font-size: 15px; font-weight: 700; }
 #ticket .t-rude { font-size: 18px; color: var(--red); line-height: 1.35; margin: 4px 0 2px; }
 #ticket .t-note { color: var(--brown-60); font-size: 12px; }
 #ticket .t-patience { height: 5px; border-radius: 3px; background: var(--brown-15); margin-top: 8px; overflow: hidden; }
@@ -117,6 +118,9 @@ kbd { font-family: inherit; display: inline-block; background: var(--brown); col
 .btn-primary { background: var(--teal); color: #fff; }
 .btn-ghost { background: var(--cream); color: var(--brown); }
 .btn-big { width: 100%; font-size: 22px; padding: 14px 24px 16px; }
+.btn-hard { width: 100%; margin-top: 8px; font-size: 17px; padding: 10px 20px 12px; }
+.btn-hard:disabled { opacity: .55; cursor: not-allowed; }
+.unlock { width: 100%; background: var(--orange); color: #fff; border-radius: 14px; padding: 10px 14px; font-size: 15px; text-align: center; margin: 6px 0; }
 .result-wrap { width: min(440px, 100%); display: flex; flex-direction: column; gap: 14px; align-items: center; animation: rise .5s ease-out; }
 #result-money { width: 100%; background: var(--paper); border-radius: 4px; padding: 12px 16px 16px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.3);
   -webkit-mask: radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) -6px 0 / 12px 100% repeat-x; mask: radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) -6px 0 / 12px 100% repeat-x; }
@@ -157,4 +161,42 @@ kbd { font-family: inherit; display: inline-block; background: var(--brown); col
   .chip b { font-size: 19px; }
   #hint { font-size: 13.5px; }
   #bubble { font-size: 14px; }
+}
+
+/* ---- 提醒（蓋子、料不能加進雪克杯）---- */
+.pop.warn { color: #ffe08a; font-size: 18px; }
+
+/* ---- 顧客評論（像地圖 App 的店家評論）---- */
+#reviews { position: absolute; z-index: 4; top: 64px; right: 12px; width: min(300px, 72vw); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.rv-toast { animation: rvIn .35s ease-out; transition: opacity .4s, transform .4s; }
+.rv-toast.out { opacity: 0; transform: translateX(30px); }
+@keyframes rvIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+.rv { background: #fff; color: #202124; border-radius: 12px; padding: 10px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.18); font-family: system-ui, -apple-system, 'Noto Sans TC', sans-serif; text-align: left; }
+.rv-head { display: flex; gap: 9px; align-items: center; }
+.rv-head i { flex: none; width: 30px; height: 30px; border-radius: 50%; color: #fff; font-style: normal; font-size: 15px; display: grid; place-items: center; font-weight: 600; }
+.rv-head b { display: block; font-size: 14px; font-weight: 600; }
+.rv-head small { display: block; font-size: 11px; color: #70757a; }
+.rv-line { display: flex; gap: 8px; align-items: baseline; margin-top: 5px; }
+.rv-line small { font-size: 11px; color: #70757a; }
+.rv-stars { color: #fbbc04; letter-spacing: 1px; font-size: 14px; }
+.rv p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; }
+#result-reviews { width: 100%; background: var(--paper); border-radius: 4px; padding: 12px 14px 6px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+#result-reviews:empty { display: none; }
+#result-reviews h3 { margin: 0 0 8px; font-size: 18px; color: var(--brown); }
+#result-reviews .rv { margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.rv-sum { display: flex; gap: 10px; align-items: baseline; margin-bottom: 10px; color: var(--brown); }
+.rv-sum b { font-size: 30px; }
+.rv-sum .rv-stars { font-size: 18px; }
+.rv-empty { color: #8a7a6a; font-size: 14px; }
+
+/* 結算畫面很長（評論多）：從上面開始排，才捲得到最上面 */
+#screen-result { place-items: start center; }
+#screen-result .result-wrap { margin-block: auto; }
+/* 手機直式：評論縮窄，不蓋到左邊的小白單 */
+@media (max-width: 480px) {
+  #reviews { width: calc(60vw - 26px); right: 8px; top: calc(62px + var(--safe-t)); }
+  #reviews .rv-toast:nth-child(n+2) { display: none; }
+  .rv { padding: 8px 9px; }
+  .rv p { font-size: 12px; }
+  .rv-head i { width: 24px; height: 24px; font-size: 13px; }
 }

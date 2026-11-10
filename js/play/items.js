@@ -11,12 +11,10 @@ export function groundY(x, z) {
   if (z < lg.z0 - 0.02) return z < -4.25 ? -0.15 : 0.0; // 窗外：騎樓／馬路
   if (x > lg.x0 && x < lg.x1 && z >= lg.z0 && z < lg.z1) return lg.y;
   if (x > c.x0 && x < c.x1 && z >= c.z0 && z < c.z1) {
-    if (x > 0.345 && x < 0.855) {
-      if (Math.abs(z - L.wellZ) < L.wellD / 2) return Y - 0.08;
-      if (Math.abs(z - L.iceBin.z) < L.iceBin.d / 2) return Y - 0.1;
-    }
-    const s = L.sealer;
-    if (Math.abs(x - s.x) < 0.13 && Math.abs(z - s.z) < 0.17) return Y + 0.03;
+    if (x > L.wellX0 && x < L.wellX1 && Math.abs(z - L.wellZ) < L.wellD / 2) return Y - 0.08;
+    const ib = L.iceBin;
+    if (Math.abs(x - ib.x) < ib.w / 2 && Math.abs(z - ib.z) < ib.d / 2) return Y - 0.1;
+    for (const s of [L.sealer, L.shakeMachine]) if (Math.abs(x - s.x) < 0.13 && Math.abs(z - s.z) < 0.17) return Y + 0.03;
     return Y;
   }
   if (Math.abs(x) > 0.95 && z < lg.z1 && z >= lg.z0) return Y + 0.2;
@@ -142,7 +140,7 @@ export class Items {
         for (const c of cups) {
           if (!c.alive || c.sealed || c.up.y < 0.8) continue;
           const rim = c.rimCenter(this._p);
-          if (py >= rim.y - 0.005 && it.p.y < rim.y && Math.hypot(it.p.x - rim.x, it.p.z - rim.z) < CUP.rTop - 0.003) {
+          if (py >= rim.y - 0.005 && it.p.y < rim.y && Math.hypot(it.p.x - rim.x, it.p.z - rim.z) < (c.R || CUP.rTop) - 0.003) {
             if (hooks.intoCup(it, c)) { this.list.splice(i, 1); used = true; break; }
           }
         }

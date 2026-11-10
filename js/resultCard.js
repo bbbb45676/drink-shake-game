@@ -8,7 +8,7 @@ export function titleFor(score) {
 }
 
 // 下班結算卡（4:5）：背景是這一班最後的 3D 畫面
-export function drawCard(bg, { score, stats, money }) {
+export function drawCard(bg, { score, stats, money, rating }) {
   const c = document.createElement('canvas');
   c.width = CARD_W; c.height = CARD_H;
   const g = c.getContext('2d');
@@ -61,7 +61,8 @@ export function drawCard(bg, { score, stats, money }) {
   g.font = `34px ${FONT}`; g.fillText(t.line, CARD_W / 2, py + 132);
   g.font = `30px ${FONT}`; g.globalAlpha = 0.6;
   const mtxt = money ? `　·　老闆${money.net < 0 ? '虧' : '賺'}了 NT$${Math.abs(money.net)}` : '';
-  g.fillText(`分數 ${score}${mtxt}`, CARD_W / 2, py + 180); g.globalAlpha = 1;
+  const rtxt = rating ? `　·　評分 ${rating.toFixed(1)}★` : '';
+  g.fillText(`分數 ${score}${mtxt}${rtxt}`, CARD_W / 2, py + 180); g.globalAlpha = 1;
 
   const items = [
     ['出餐', stats.served, '杯'],

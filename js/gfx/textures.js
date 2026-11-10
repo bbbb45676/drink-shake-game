@@ -153,11 +153,29 @@ export function drawLogo(g, cx, cy, r, { ring = PALETTE.teal, fill = PALETTE.cre
   g.restore();
 }
 
+// 雪克杯：一邊印刻度（100～1000cc），canvas 上緣＝杯口
+export function shakerPrintTex() {
+  const c = canvas(1024, 256), g = c.getContext('2d');
+  g.clearRect(0, 0, 1024, 256);
+  const full = 1015; // 雪克杯容量（cc），對應杯口
+  g.strokeStyle = 'rgba(40,60,80,.85)'; g.fillStyle = 'rgba(40,60,80,.9)';
+  g.font = `bold 15px ${FONT}`; g.textBaseline = 'middle';
+  for (let cc = 100; cc <= 1000; cc += 50) {
+    const y = 256 * (1 - cc / full);
+    const big = cc % 100 === 0;
+    for (const x0 of [430, 942]) { // 前後各一組
+      g.lineWidth = big ? 3 : 2; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + (big ? 46 : 26), y); g.stroke();
+      if (big) g.fillText(String(cc), x0 + 52, y);
+    }
+  }
+  return tex(c);
+}
+
 // 杯身印刷：一圈店名帶
 export function cupPrintTex() {
   const c = canvas(1024, 256), g = c.getContext('2d');
   g.clearRect(0, 0, 1024, 256);
-  // 8 分線（茶加到這條線）
+  // 8 分線（冰、料、茶加起來的液面到這條線）
   g.strokeStyle = 'rgba(62,38,24,.75)'; g.lineWidth = 3; g.setLineDash([14, 8]);
   for (const [a, b] of [[0, 185], [327, 697], [839, 1024]]) { g.beginPath(); g.moveTo(a, 51); g.lineTo(b, 51); g.stroke(); }
   g.setLineDash([]);
@@ -239,13 +257,13 @@ export function recipeTex(menu) {
   menu.sweet.slice().reverse().forEach((s, i) => row(80 + (i % 3) * 310, 222 + ((i / 3) | 0) * 54, s.name, `${s.v}cc`, 100));
   sec(345, '冰量（一顆約 25g，一鏟約 200g）');
   menu.ice.forEach((s, i) => row(80, 405 + i * 54, s.name, s.recipe, 190));
-  sec(700, '茶、加料、出杯');
+  sec(700, '做法（雪克杯）');
   g.font = `36px ${FONT}`; g.fillStyle = PALETTE.brown;
-  g.fillText('茶加到杯子上的 8 分線（冰越少，茶越多）', 80, 762);
-  g.fillText('加料一勺約 60g　→　封膜　→　搖 10 下　→　出杯', 80, 818);
+  g.fillText('茶＋果糖＋冰 → 雪克杯 → 蓋蓋子 → 搖茶機', 80, 762);
+  g.fillText('茶：正常冰 300・少冰 350・微冰 420・去冰 490cc', 80, 818);
   g.fillStyle = 'rgba(62,38,24,.55)'; g.font = `30px ${FONT}`;
-  g.fillText('去冰：先加一鏟冰、倒茶冰鎮，再用空冰鏟把冰刮掉，茶補到 8 分線', 80, 890);
-  g.fillText('少糖 70%・半糖 50%・微糖 30%（以全糖 40cc 為準）', 80, 940);
+  g.fillText('去冰：冰跟茶一起搖（冰鎮），再用空冰鏟把冰刮掉', 80, 890);
+  g.fillText('料放杯子 → 搖好自動開蓋 → 全部倒進去 → 封膜', 80, 940);
   return tex(c);
 }
 

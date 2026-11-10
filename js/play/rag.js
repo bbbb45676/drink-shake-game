@@ -21,7 +21,7 @@ function ragTex() {
 
 export class Rag {
   constructor(scene) {
-    this.home = new THREE.Vector3(-0.6, L.counterY + 0.007, -0.24);
+    this.home = new THREE.Vector3(L.rag.x, L.counterY + 0.007, L.rag.z);
     this.mat = new THREE.MeshStandardMaterial({ map: ragTex(), roughness: 0.95, color: '#ffffff' });
     const geo = new RoundedBoxGeometry(W, 0.012, D, 2, 0.005);
     // 一點皺褶

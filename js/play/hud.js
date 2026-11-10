@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { ticketRows } from './orders.js';
 import { CONFIG } from '../config.js';
+import { starText } from './reviews.js';
 
 const $ = (id) => document.getElementById(id);
 const _v = new THREE.Vector3();
+const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
 // 只顯示資訊（分數、時間、點單、對話、杯子內容）。操作全部靠兩隻手。
 export class Hud {
@@ -36,6 +38,8 @@ export class Hud {
       html += rows.map(([k, v, hot, rec]) => `<div class="t-row${hot ? ' hot' : ''}"><span>${k}</span><b>${v}</b></div>${rec ? `<div class="t-rec">${rec}</div>` : ''}`).join('');
       if (c.rule?.shakeCount) html += `<div class="t-special">要搖 ${c.rule.shakeCount} 下</div>`;
       if (c.rule?.sameAsLast) html += `<div class="t-special">跟上次一樣（？）</div>`;
+      if (c.remakes) html += `<div class="t-special">退回重做（第 ${c.remakes + 1} 杯）</div>`;
+      if (c.pay) html += `<div class="t-pay">應收 NT$${c.pay.price}・客人付 NT$${c.pay.paid}</div>`;
     }
     html += `<div class="t-patience"><i style="width:100%"></i></div>`;
     t.innerHTML = html;
@@ -88,15 +92,25 @@ export class Hud {
     this.tagCup = cup;
     if (!cup) { this.tag.hidden = true; return; }
     const main = cup.mainTea();
-    const tea = main ? CONFIG.menu.teas.find((t) => t.id === main) : null;
+    const tea = main ? (CONFIG.menu.teas.find((t) => t.id === main) || CONFIG.liquids[main]) : null;
+    const liqs = Object.entries(cup.tea).filter(([, v]) => v * 700 >= 1).map(([k, v]) => `<span>${CONFIG.liquids[k].name} ${Math.round(v * 700)}cc</span>`);
     const pct = Math.round(Math.min(1, cup.level) * 100);
     const parts = [];
-    parts.push(`<span class="c-tea"><i style="background:${tea ? tea.color : '#ddd'}"></i>${tea ? tea.name : '空杯'} ${pct}%</span>`);
+    const total = Math.round(cup.fill * 700);
+    if (cup.isShaker) {
+      // 不鏽鋼雪克杯：看不到裡面，直接寫幾 cc
+      parts.push(`<span class="c-tea"><i style="background:${tea ? tea.color : '#ddd'}"></i>雪克杯 ${liqs.length ? `<b>${total}cc</b>` : '空的'}</span>`);
+      if (liqs.length > 1) parts.push(...liqs);
+      parts.push(cup.lid ? '<span class="c-ok">蓋著</span>' : '<span>沒蓋</span>');
+    } else {
+      parts.push(`<span class="c-tea"><i style="background:${tea ? tea.color : '#ddd'}"></i>${tea ? `<b>${total}cc</b>` : '空杯'}</span>`, ...liqs);
+    }
     parts.push(`<span>果糖 ${cup.sugar.toFixed(1)}cc</span>`);
     parts.push(`<span>冰 ${cup.ice}${cup.ice === 0 && cup.chilled ? '（冰鎮過）' : ''}</span>`);
     for (const t of CONFIG.menu.toppings) if (cup.tops[t.id]) parts.push(`<span>${t.name} ${cup.tops[t.id]}</span>`);
-    if (cup.sealed) parts.push(`<span class="c-ok">${cup.mix >= 1 ? '搖勻了' : `搖 ${cup.shakes}/${CONFIG.pour.shakesToMix}`}</span>`);
-    if (cup.shakes >= CONFIG.pour.shakesToMix && cup.mix >= 1) parts.push(`<span>${cup.shakes} 下</span>`);
+    if (cup.fill > 0.05) parts.push(cup.mix >= 0.95 ? '<span class="c-ok">搖勻了</span>' : `<span>${cup.isShaker ? '還沒搖' : '沒搖勻'}</span>`);
+    if (cup.sealed) parts.push('<span class="c-ok">封好了</span>');
+    if (cup.shakes >= CONFIG.pour.shakesToMix) parts.push(`<span>手搖 ${cup.shakes} 下</span>`);
     const html = parts.join('');
     if (html !== this.tagHtml) { this.tag.innerHTML = html; this.tagHtml = html; }
     this.tag.hidden = false;
@@ -112,6 +126,23 @@ export class Hud {
     const s = this.project(_v);
     el.style.left = `${s.x}px`; el.style.top = `${s.y}px`;
   }
+
+  // ---- 顧客評論（客人離開後跳出來）----
+  reviewHtml(r) {
+    return `<div class="rv"><div class="rv-head"><i style="background:${r.color}">${r.initial}</i><div><b>${esc(r.name)}</b><small>${esc(r.badge)}</small></div></div>`
+      + `<div class="rv-line"><span class="rv-stars s${r.stars}">${starText(r.stars)}</span><small>剛剛</small></div><p>${esc(r.text)}</p></div>`;
+  }
+  showReview(r) {
+    const box = $('reviews');
+    if (!box) return;
+    const el = document.createElement('div');
+    el.className = 'rv-toast';
+    el.innerHTML = this.reviewHtml(r);
+    box.prepend(el);
+    while (box.children.length > 2) box.lastChild.remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, 6500);
+  }
+  clearReviews() { const box = $('reviews'); if (box) box.innerHTML = ''; }
 
   update(dt) {
     if (this.bubbleFor) {
